@@ -427,7 +427,7 @@ const showValidation = ref(false) // 新增：显示验证信息
 
 // 图表选项卡配置
 const chartTabs = computed(() => {
-  console.log('[费用统计] chartTabs computed 被触发')
+  console.log('[费用统计] ========== chartTabs computed 被触发 ==========')
   
   const tabs = [
     { label: '用户费用总额', value: 'userTotal', icon: 'fas fa-user-dollar' },
@@ -437,19 +437,29 @@ const chartTabs = computed(() => {
     { label: '费用趋势', value: 'trend', icon: 'fas fa-trending-up' }
   ]
   
-  // 如果有"所有申请记录"权限，添加该选项卡
-  console.log('[费用统计] 开始检查权限，准备调用 hasViewAllApplicationsPermission.value')
+  // 强制检查：如果是admin用户，直接添加选项卡
+  const username = userStore.userInfo?.username || ''
+  const isAdmin = username.toLowerCase() === 'admin'
+  
+  console.log('[费用统计] 用户名检查:', { username, isAdmin })
+  console.log('[费用统计] 用户信息:', userStore.userInfo)
+  
+  // 方法1: 检查权限
   const hasPermission = hasViewAllApplicationsPermission.value
   console.log('[费用统计] 权限检查结果:', hasPermission)
   
-  if (hasPermission) {
+  // 方法2: 如果是admin，强制添加
+  if (isAdmin || hasPermission) {
     tabs.push({ label: '所有申请记录', value: 'allApplications', icon: 'fas fa-list-alt' })
     console.log('[费用统计] ✅ 已添加"所有申请记录"选项卡，当前选项卡数量:', tabs.length)
+    console.log('[费用统计] 添加原因:', isAdmin ? 'admin用户' : '权限检查通过')
   } else {
-    console.log('[费用统计] ❌ 未添加"所有申请记录"选项卡 - 用户没有权限')
+    console.log('[费用统计] ❌ 未添加"所有申请记录"选项卡')
+    console.log('[费用统计] 原因: 不是admin且没有权限')
   }
   
   console.log('[费用统计] 最终选项卡列表:', tabs.map(t => t.label))
+  console.log('[费用统计] ====================================')
   return tabs
 })
 
