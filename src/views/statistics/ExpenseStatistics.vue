@@ -278,6 +278,10 @@
 </template>
 
 <script setup>
+// ========== 费用统计组件脚本开始执行 ==========
+console.log('[费用统计] ========== 脚本开始执行 ==========')
+console.log('[费用统计] 时间戳:', new Date().toISOString())
+
 import { ref, reactive, onMounted, watch, computed, nextTick } from 'vue'
 import NavigationBar from '@/components/NavigationBar.vue'
 import { getMainCategoriesList } from '@/api/expense'
@@ -293,15 +297,19 @@ import ExpenseOverview from './expense/ExpenseOverview.vue'
 import ExpenseTrend from './expense/ExpenseTrend.vue'
 import AllExpenseApplications from './expense/AllExpenseApplications.vue'
 
+console.log('[费用统计] 所有导入完成')
+
 const userStore = useUserStore()
 
 // 在组件加载时立即输出调试信息
-console.log('[费用统计] 组件开始加载')
+console.log('[费用统计] ========== 组件开始加载 ==========')
 console.log('[费用统计] 用户Store状态:', {
   isLoggedIn: userStore.isLoggedIn,
   hasUserInfo: !!userStore.userInfo,
-  userInfo: userStore.userInfo
+  userInfo: userStore.userInfo,
+  username: userStore.userInfo?.username
 })
+console.log('[费用统计] ====================================')
 
 // 简单的admin用户检查（备用方案）
 const isAdminUser = computed(() => {
