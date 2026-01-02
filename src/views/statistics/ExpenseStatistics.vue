@@ -230,13 +230,13 @@
         </div>
         
         <!-- 选项卡导航 -->
-        <div class="flex space-x-1 bg-white/5 rounded-xl p-1 mb-6">
+        <div class="flex space-x-1 bg-white/5 rounded-xl p-1 mb-6 overflow-x-auto">
           <button
             v-for="tab in chartTabs"
             :key="tab.value"
             @click="activeTab = tab.value"
             :class="[
-              'flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-lg text-sm font-medium transition-all duration-300',
+              'flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-lg text-sm font-medium transition-all duration-300 whitespace-nowrap',
               activeTab === tab.value
                 ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-lg'
                 : 'text-gray-400 hover:text-white hover:bg-white/10'
@@ -268,6 +268,8 @@ import { ref, reactive, onMounted, watch, computed, nextTick } from 'vue'
 import NavigationBar from '@/components/NavigationBar.vue'
 import { getMainCategoriesList } from '@/api/expense'
 import { ElMessage } from 'element-plus'
+import { useUserStore } from '@/stores/user'
+import { permissionUtils } from '@/utils/permission'
 
 // 导入统计组件
 import UserExpenseTotal from './expense/UserExpenseTotal.vue'
@@ -275,6 +277,59 @@ import CategoryExpenseStats from './expense/CategoryExpenseStats.vue'
 import UserCategoryBreakdown from './expense/UserCategoryBreakdown.vue'
 import ExpenseOverview from './expense/ExpenseOverview.vue'
 import ExpenseTrend from './expense/ExpenseTrend.vue'
+import AllExpenseApplications from './expense/AllExpenseApplications.vue'
+
+const userStore = useUserStore()
+
+// 检查是否有"所有申请记录"权限
+const hasViewAllApplicationsPermission = computed(() => {
+  // 方法1: 检查是否有权限 'expense_statistics:view_all'
+  const hasPermission = permissionUtils.hasPermission('expense_statistics:view_all')
+  
+  // 方法2: 如果是超级管理员，也允许访问（兼容性检查）
+  if (!hasPermission && userStore.userInfo) {
+    const roleCode = userStore.userInfo?.roleInfo?.role_code
+    const dataPermission = userStore.userInfo?.roleInfo?.data_permission
+    const roleName = userStore.userInfo?.roleInfo?.role_name
+    
+    const isSuperAdmin = roleCode === 'superadmin' || 
+                        dataPermission === 'all' || 
+                        roleName === '超级管理员'
+    
+    if (isSuperAdmin) {
+      console.log('[费用统计] 通过超级管理员检查，允许访问所有申请记录')
+      return true
+    }
+  }
+  
+  // 调试信息 - 详细输出
+  console.log('[费用统计] ========== 权限检查详情 ==========')
+  console.log('[费用统计] 权限代码检查结果:', hasPermission)
+  console.log('[费用统计] 用户信息:', userStore.userInfo)
+  console.log('[费用统计] 角色信息:', userStore.userInfo?.roleInfo)
+  console.log('[费用统计] 用户菜单列表:', userStore.userMenus)
+  
+  // 检查用户菜单中是否有该权限
+  const userMenus = userStore.userMenus || []
+  const extractFunctions = (menus) => {
+    const functions = []
+    menus.forEach(menu => {
+      if (menu.type === 'function' && menu.path) {
+        functions.push({ path: menu.path, name: menu.name, type: menu.type })
+      }
+      if (menu.children && Array.isArray(menu.children)) {
+        functions.push(...extractFunctions(menu.children))
+      }
+    })
+    return functions
+  }
+  const allFunctions = extractFunctions(userMenus)
+  console.log('[费用统计] 所有功能权限:', allFunctions)
+  console.log('[费用统计] 是否包含 expense_statistics:view_all:', allFunctions.some(f => f.path === 'expense_statistics:view_all'))
+  console.log('[费用统计] ====================================')
+  
+  return hasPermission
+})
 
 // 响应式数据
 const queryForm = reactive({
@@ -290,13 +345,29 @@ const loading = ref(false)
 const showValidation = ref(false) // 新增：显示验证信息
 
 // 图表选项卡配置
-const chartTabs = ref([
-  { label: '用户费用总额', value: 'userTotal', icon: 'fas fa-user-dollar' },
-  { label: '分类费用统计', value: 'categoryStats', icon: 'fas fa-chart-pie' },
-  { label: '用户分类占比', value: 'userBreakdown', icon: 'fas fa-users' },
-  { label: '部门费用概览', value: 'overview', icon: 'fas fa-chart-line' },
-  { label: '费用趋势', value: 'trend', icon: 'fas fa-trending-up' }
-])
+const chartTabs = computed(() => {
+  const tabs = [
+    { label: '用户费用总额', value: 'userTotal', icon: 'fas fa-user-dollar' },
+    { label: '分类费用统计', value: 'categoryStats', icon: 'fas fa-chart-pie' },
+    { label: '用户分类占比', value: 'userBreakdown', icon: 'fas fa-users' },
+    { label: '部门费用概览', value: 'overview', icon: 'fas fa-chart-line' },
+    { label: '费用趋势', value: 'trend', icon: 'fas fa-trending-up' }
+  ]
+  
+  // 如果有"所有申请记录"权限，添加该选项卡
+  const hasPermission = hasViewAllApplicationsPermission.value
+  console.log('[费用统计] 是否有"所有申请记录"权限:', hasPermission)
+  
+  if (hasPermission) {
+    tabs.push({ label: '所有申请记录', value: 'allApplications', icon: 'fas fa-list-alt' })
+    console.log('[费用统计] 已添加"所有申请记录"选项卡')
+  } else {
+    console.log('[费用统计] 未添加"所有申请记录"选项卡 - 用户没有权限')
+  }
+  
+  console.log('[费用统计] 最终选项卡列表:', tabs.map(t => t.label))
+  return tabs
+})
 
 const activeTab = ref('userTotal')
 
@@ -306,7 +377,8 @@ const componentMap = {
   categoryStats: CategoryExpenseStats,
   userBreakdown: UserCategoryBreakdown,
   overview: ExpenseOverview,
-  trend: ExpenseTrend
+  trend: ExpenseTrend,
+  allApplications: AllExpenseApplications
 }
 
 // 当前组件
@@ -336,7 +408,8 @@ const getCurrentTabDescription = () => {
     categoryStats: '按费用分类统计支出情况',
     userBreakdown: '查看指定用户的分类费用占比',
     overview: '按部门维度查看费用概览',
-    trend: '分析费用趋势变化'
+    trend: '分析费用趋势变化',
+    allApplications: '查看所有用户的费用申请记录（仅超级管理员）'
   }
   return descriptions[activeTab.value] || '费用统计分析'
 }

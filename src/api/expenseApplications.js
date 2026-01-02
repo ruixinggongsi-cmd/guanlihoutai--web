@@ -18,6 +18,23 @@ export const expenseApplicationsAPI = {
   },
 
   /**
+   * 获取所有费用申请列表（仅超级管理员）
+   * @param {Object} params - 查询参数
+   * @param {number} params.page - 页码，默认1
+   * @param {number} params.pageSize - 每页条数，默认10
+   * @param {string} params.keyword - 搜索关键词（费用名称、描述）
+   * @param {string} params.status - 状态筛选：pending/approving/approved/rejected/cancelled
+   * @param {string} params.applicant_id - 申请人ID筛选
+   * @param {string} params.start_date - 开始日期（YYYY-MM-DD）
+   * @param {string} params.end_date - 结束日期（YYYY-MM-DD）
+   * @param {string} params.mainCategoryId - 主分类ID
+   * @param {string} params.subCategoryId - 子分类ID
+   */
+  getAllExpenseApplicationsList(params = {}) {
+    return request.get('/expense-applications/list-all', params)
+  },
+
+  /**
    * 创建费用申请
    * @param {Object} data - 费用申请数据
    * @param {string} data.name - 费用名称（必填）
@@ -56,6 +73,14 @@ export const expenseApplicationsAPI = {
    */
   cancelExpenseApplication(id) {
     return request.post(`/expense-applications/${id}/cancel`)
+  },
+
+  /**
+   * 删除费用申请（仅超级管理员）
+   * @param {string} id - 费用申请ID
+   */
+  deleteExpenseApplication(id) {
+    return request.delete(`/expense-applications/${id}`)
   },
 
   /**
