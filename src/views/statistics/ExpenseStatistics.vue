@@ -245,6 +245,20 @@
             <i :class="tab.icon"></i>
             <span>{{ tab.label }}</span>
           </button>
+          <!-- 备用：如果用户是admin，直接显示"所有申请记录"选项卡 -->
+          <button
+            v-if="isAdminUser && !chartTabs.find(t => t.value === 'allApplications')"
+            @click="activeTab = 'allApplications'"
+            :class="[
+              'flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-lg text-sm font-medium transition-all duration-300 whitespace-nowrap',
+              activeTab === 'allApplications'
+                ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-lg'
+                : 'text-gray-400 hover:text-white hover:bg-white/10'
+            ]"
+          >
+            <i class="fas fa-list-alt"></i>
+            <span>所有申请记录</span>
+          </button>
         </div>
 
         <!-- 动态组件渲染 -->
@@ -281,51 +295,118 @@ import AllExpenseApplications from './expense/AllExpenseApplications.vue'
 
 const userStore = useUserStore()
 
+// 在组件加载时立即输出调试信息
+console.log('[费用统计] 组件开始加载')
+console.log('[费用统计] 用户Store状态:', {
+  isLoggedIn: userStore.isLoggedIn,
+  hasUserInfo: !!userStore.userInfo,
+  userInfo: userStore.userInfo
+})
+
+// 简单的admin用户检查（备用方案）
+const isAdminUser = computed(() => {
+  if (!userStore.userInfo) return false
+  
+  const username = userStore.userInfo?.username || ''
+  const roleCode = userStore.userInfo?.roleInfo?.role_code || userStore.userInfo?.role_code
+  const dataPermission = userStore.userInfo?.roleInfo?.data_permission || userStore.userInfo?.data_permission
+  const roleName = userStore.userInfo?.roleInfo?.role_name || userStore.userInfo?.role_name
+  
+  const isAdmin = username.toLowerCase() === 'admin' || 
+                 roleCode === 'superadmin' || 
+                 dataPermission === 'all' || 
+                 roleName === '超级管理员'
+  
+  console.log('[费用统计] isAdminUser 检查:', {
+    username,
+    roleCode,
+    dataPermission,
+    roleName,
+    isAdmin
+  })
+  
+  return isAdmin
+})
+
 // 检查是否有"所有申请记录"权限
 const hasViewAllApplicationsPermission = computed(() => {
-  // 方法1: 检查是否有权限 'expense_statistics:view_all'
-  const hasPermission = permissionUtils.hasPermission('expense_statistics:view_all')
+  // 详细调试信息
+  console.log('[费用统计] ========== 开始权限检查 ==========')
+  console.log('[费用统计] 完整用户信息:', JSON.stringify(userStore.userInfo, null, 2))
   
-  // 方法2: 如果是超级管理员，也允许访问（兼容性检查）
-  if (!hasPermission && userStore.userInfo) {
-    const roleCode = userStore.userInfo?.roleInfo?.role_code
-    const dataPermission = userStore.userInfo?.roleInfo?.data_permission
-    const roleName = userStore.userInfo?.roleInfo?.role_name
+  // 优先检查：如果是超级管理员，直接允许访问（不依赖权限菜单）
+  if (userStore.userInfo) {
+    // 尝试多种路径获取角色信息
+    const roleInfo = userStore.userInfo?.roleInfo || userStore.userInfo?.role || {}
+    const roleCode = roleInfo?.role_code || userStore.userInfo?.role_code
+    const dataPermission = roleInfo?.data_permission || userStore.userInfo?.data_permission
+    const roleName = roleInfo?.role_name || userStore.userInfo?.role_name
+    
+    // 检查用户名是否为admin（备用检查）
+    const username = userStore.userInfo?.username || ''
+    const isAdminUser = username.toLowerCase() === 'admin'
+    
+    console.log('[费用统计] 角色信息提取:', {
+      roleInfo,
+      roleCode,
+      dataPermission,
+      roleName,
+      username,
+      isAdminUser
+    })
     
     const isSuperAdmin = roleCode === 'superadmin' || 
                         dataPermission === 'all' || 
-                        roleName === '超级管理员'
+                        roleName === '超级管理员' ||
+                        isAdminUser // 如果用户名为admin，也认为是超级管理员
     
     if (isSuperAdmin) {
-      console.log('[费用统计] 通过超级管理员检查，允许访问所有申请记录')
+      console.log('[费用统计] ✅ 通过超级管理员检查，允许访问所有申请记录', {
+        roleCode,
+        dataPermission,
+        roleName,
+        username,
+        isAdminUser
+      })
+      console.log('[费用统计] ====================================')
       return true
+    } else {
+      console.log('[费用统计] ❌ 未通过超级管理员检查')
     }
+  } else {
+    console.log('[费用统计] ⚠️ 用户信息为空')
   }
+  
+  // 方法2: 检查是否有权限 'expense_statistics:view_all'（通过权限菜单）
+  const hasPermission = permissionUtils.hasPermission('expense_statistics:view_all')
+  console.log('[费用统计] 权限代码检查结果:', hasPermission)
   
   // 调试信息 - 详细输出
-  console.log('[费用统计] ========== 权限检查详情 ==========')
-  console.log('[费用统计] 权限代码检查结果:', hasPermission)
-  console.log('[费用统计] 用户信息:', userStore.userInfo)
-  console.log('[费用统计] 角色信息:', userStore.userInfo?.roleInfo)
-  console.log('[费用统计] 用户菜单列表:', userStore.userMenus)
-  
-  // 检查用户菜单中是否有该权限
-  const userMenus = userStore.userMenus || []
-  const extractFunctions = (menus) => {
-    const functions = []
-    menus.forEach(menu => {
-      if (menu.type === 'function' && menu.path) {
-        functions.push({ path: menu.path, name: menu.name, type: menu.type })
-      }
-      if (menu.children && Array.isArray(menu.children)) {
-        functions.push(...extractFunctions(menu.children))
-      }
-    })
-    return functions
+  if (!hasPermission) {
+    console.log('[费用统计] ========== 权限菜单检查详情 ==========')
+    console.log('[费用统计] 用户菜单列表:', userStore.userMenus)
+    
+    // 检查用户菜单中是否有该权限
+    const userMenus = userStore.userMenus || []
+    const extractFunctions = (menus) => {
+      const functions = []
+      menus.forEach(menu => {
+        if (menu.type === 'function' && menu.path) {
+          functions.push({ path: menu.path, name: menu.name, type: menu.type })
+        }
+        if (menu.children && Array.isArray(menu.children)) {
+          functions.push(...extractFunctions(menu.children))
+        }
+      })
+      return functions
+    }
+    const allFunctions = extractFunctions(userMenus)
+    console.log('[费用统计] 所有功能权限:', allFunctions)
+    console.log('[费用统计] 是否包含 expense_statistics:view_all:', allFunctions.some(f => f.path === 'expense_statistics:view_all'))
+    console.log('[费用统计] ====================================')
   }
-  const allFunctions = extractFunctions(userMenus)
-  console.log('[费用统计] 所有功能权限:', allFunctions)
-  console.log('[费用统计] 是否包含 expense_statistics:view_all:', allFunctions.some(f => f.path === 'expense_statistics:view_all'))
+  
+  console.log('[费用统计] 最终权限结果:', hasPermission)
   console.log('[费用统计] ====================================')
   
   return hasPermission
@@ -346,6 +427,8 @@ const showValidation = ref(false) // 新增：显示验证信息
 
 // 图表选项卡配置
 const chartTabs = computed(() => {
+  console.log('[费用统计] chartTabs computed 被触发')
+  
   const tabs = [
     { label: '用户费用总额', value: 'userTotal', icon: 'fas fa-user-dollar' },
     { label: '分类费用统计', value: 'categoryStats', icon: 'fas fa-chart-pie' },
@@ -355,14 +438,15 @@ const chartTabs = computed(() => {
   ]
   
   // 如果有"所有申请记录"权限，添加该选项卡
+  console.log('[费用统计] 开始检查权限，准备调用 hasViewAllApplicationsPermission.value')
   const hasPermission = hasViewAllApplicationsPermission.value
-  console.log('[费用统计] 是否有"所有申请记录"权限:', hasPermission)
+  console.log('[费用统计] 权限检查结果:', hasPermission)
   
   if (hasPermission) {
     tabs.push({ label: '所有申请记录', value: 'allApplications', icon: 'fas fa-list-alt' })
-    console.log('[费用统计] 已添加"所有申请记录"选项卡')
+    console.log('[费用统计] ✅ 已添加"所有申请记录"选项卡，当前选项卡数量:', tabs.length)
   } else {
-    console.log('[费用统计] 未添加"所有申请记录"选项卡 - 用户没有权限')
+    console.log('[费用统计] ❌ 未添加"所有申请记录"选项卡 - 用户没有权限')
   }
   
   console.log('[费用统计] 最终选项卡列表:', tabs.map(t => t.label))
@@ -558,6 +642,11 @@ watch(activeTab, (newTab) => {
 })
 
 onMounted(async () => {
+  console.log('[费用统计] 组件已挂载 (onMounted)')
+  console.log('[费用统计] 当前用户信息:', userStore.userInfo)
+  console.log('[费用统计] 当前权限检查结果:', hasViewAllApplicationsPermission.value)
+  console.log('[费用统计] 当前选项卡列表:', chartTabs.value.map(t => t.label))
+  
   await getMainCategories()
   
   // 设置默认日期（最近一个月）

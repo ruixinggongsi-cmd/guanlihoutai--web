@@ -114,6 +114,7 @@
               <tr>
                 <th class="px-6 py-4 text-left text-sm font-medium text-gray-400">用户信息</th>
                 <th class="px-6 py-4 text-left text-sm font-medium text-gray-400">部门</th>
+                <th class="px-6 py-4 text-left text-sm font-medium text-gray-400">职位</th>
                 <th class="px-6 py-4 text-left text-sm font-medium text-gray-400">角色</th>
                 <th class="px-6 py-4 text-left text-sm font-medium text-gray-400">状态</th>
                 <th class="px-6 py-4 text-left text-sm font-medium text-gray-400">注册时间</th>
@@ -138,6 +139,13 @@
                     <i class="fas fa-building text-xs"></i>
                     <span>{{ getDepartmentName(user.department) }}</span>
                   </div>
+                </td>
+                <td class="px-6 py-4">
+                  <div v-if="user.position && user.position.position_name" class="bg-gradient-to-r from-blue-500/20 via-blue-600/20 to-blue-700/20 text-blue-400 border border-blue-500/30 shadow-lg shadow-blue-500/20 px-3 py-1 text-xs font-bold rounded-2xl flex items-center justify-center space-x-1 backdrop-blur-sm">
+                    <i class="fas fa-briefcase text-xs"></i>
+                    <span>{{ user.position.position_name }}</span>
+                  </div>
+                  <div v-else class="text-gray-500 text-xs">-</div>
                 </td>
                 <td class="px-6 py-4">
                   <div :class="getRoleClass(user.roles)" class="px-3 py-1 text-xs font-bold rounded-2xl flex items-center justify-center space-x-1 backdrop-blur-sm">
@@ -329,6 +337,19 @@
               </div>
               
               <div>
+                <label class="block text-sm font-medium text-gray-400 mb-2">职位</label>
+                <select 
+                  v-model="userForm.position_id"
+                  class="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all duration-300"
+                >
+                  <option value="" class="bg-slate-800 text-white">请选择职位</option>
+                  <option v-for="position in positionOptions" :key="position.id" :value="position.id" class="bg-slate-800 text-white">
+                    {{ position.position_name }}
+                  </option>
+                </select>
+              </div>
+              
+              <div>
                 <label class="block text-sm font-medium text-gray-400 mb-2">状态 <span class="text-red-400">*</span></label>
                 <select 
                   v-model="userForm.status"
@@ -387,6 +408,7 @@ import NavigationBar from '../../components/NavigationBar.vue'
 import { userAPI } from '../../api/users'
 import { departmentAPI } from '../../api/department'
 import { roleGroupAPI } from '../../api/roleGroup'
+import { positionsAPI } from '../../api/positions'
 import { ElMessage } from 'element-plus'
 
 // 搜索和筛选
@@ -399,6 +421,9 @@ const departmentOptions = ref([])
 
 // 角色选项
 const roleOptions = ref([])
+
+// 职位选项
+const positionOptions = ref([])
 
 // 分页
 const currentPage = ref(1)
@@ -422,6 +447,7 @@ const userForm = ref({
   phone: '',
   department: '',
   roles: '',
+  position_id: '',
   status: 'active',
   remarks: '',
   password: '',
@@ -438,6 +464,7 @@ const resetUserForm = () => {
     phone: '',
     department: '',
     roles: 'user',
+    position_id: '',
     status: 'active',
     remarks: '',
     password: '',
@@ -495,6 +522,8 @@ const fetchUsers = async () => {
         phone: user.phone,
         department: user.department,
         roles: user.roles,
+        position_id: user.position_id,
+        position: user.position, // 职位对象，包含position_name等
         status: user.status,
         create_at: user.create_at || user.created_at,
         lastLogin: user.last_login || user.create_at // 优先使用最后登录时间
@@ -546,6 +575,7 @@ const editUser = (user) => {
     phone: user.phone,
     department: user.department,
     roles: user.roles,
+    position_id: user.position_id || '',
     status: user.status,
     remarks: user.remarks || ''
   }
@@ -620,6 +650,7 @@ const saveUser = async () => {
         phone: userForm.value.phone,
         department: userForm.value.department,
         roles: userForm.value.roles,
+        position_id: userForm.value.position_id || null,
         status: userForm.value.status,
         remarks: userForm.value.remarks
       }
@@ -647,6 +678,7 @@ const saveUser = async () => {
         phone: userForm.value.phone,
         department: userForm.value.department,
         roles: userForm.value.roles,
+        position_id: userForm.value.position_id || null,
         status: userForm.value.status === 'active',
         remarks: userForm.value.remarks,
         password: userForm.value.password
@@ -702,6 +734,18 @@ const fetchRoleOptions = async () => {
   }
 }
 
+// 获取职位选项
+const fetchPositionOptions = async () => {
+  try {
+    const response = await positionsAPI.getPositionOptions()
+    if (response.success && response.data) {
+      positionOptions.value = response.data
+    }
+  } catch (error) {
+    ElMessage.error({message: '获取职位选项失败', duration: 1000})
+  }
+}
+
 // 获取部门中文名称
 const getDepartmentName = (departmentValue) => {
  
@@ -719,7 +763,7 @@ watch(currentPage, () => {
 onMounted(() => {
   fetchDepartmentOptions()
   fetchRoleOptions()
- 
+  fetchPositionOptions()
   fetchUsers()
 })
 </script>
