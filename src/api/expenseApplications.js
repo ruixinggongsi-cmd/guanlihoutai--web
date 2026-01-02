@@ -84,6 +84,14 @@ export const expenseApplicationsAPI = {
   },
 
   /**
+   * 批量删除费用申请（仅超级管理员）
+   * @param {Array<string>} ids - 费用申请ID数组
+   */
+  batchDeleteExpenseApplications(ids) {
+    return request.post('/expense-applications/batch-delete', { ids })
+  },
+
+  /**
    * 获取待审批列表
    * @param {Object} params - 查询参数
    * @param {number} params.page - 页码，默认1

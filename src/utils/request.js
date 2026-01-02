@@ -209,6 +209,16 @@ export default {
 
   // DELETE请求
   delete(url, config = {}) {
+    // 如果config是对象且包含data属性，直接使用；否则将整个config作为data
+    if (config.data) {
+      console.log('[request.delete] 使用config.data:', config.data)
+      return service.delete(url, config)
+    } else if (Object.keys(config).length > 0 && !config.headers && !config.params) {
+      // 如果config看起来像是数据对象，将其作为data传递
+      console.log('[request.delete] 将config作为data传递:', config)
+      return service.delete(url, { data: config })
+    }
+    console.log('[request.delete] 直接使用config:', config)
     return service.delete(url, config)
   },
 
