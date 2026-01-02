@@ -652,10 +652,14 @@ watch(activeTab, (newTab) => {
 })
 
 onMounted(async () => {
-  console.log('[费用统计] 组件已挂载 (onMounted)')
+  console.log('[费用统计] ========== 组件已挂载 (onMounted) ==========')
   console.log('[费用统计] 当前用户信息:', userStore.userInfo)
+  console.log('[费用统计] 用户名:', userStore.userInfo?.username)
   console.log('[费用统计] 当前权限检查结果:', hasViewAllApplicationsPermission.value)
+  console.log('[费用统计] isAdminUser 值:', isAdminUser.value)
   console.log('[费用统计] 当前选项卡列表:', chartTabs.value.map(t => t.label))
+  console.log('[费用统计] 选项卡数量:', chartTabs.value.length)
+  console.log('[费用统计] ====================================')
   
   await getMainCategories()
   
@@ -666,6 +670,14 @@ onMounted(async () => {
   
   queryForm.endDate = endDate.toISOString().split('T')[0]
   queryForm.startDate = startDate.toISOString().split('T')[0]
+  
+  // 延迟检查，确保用户信息已加载
+  setTimeout(() => {
+    console.log('[费用统计] ========== 延迟检查 (1秒后) ==========')
+    console.log('[费用统计] 用户信息:', userStore.userInfo)
+    console.log('[费用统计] 选项卡列表:', chartTabs.value.map(t => t.label))
+    console.log('[费用统计] ====================================')
+  }, 1000)
 })
 </script>
 
