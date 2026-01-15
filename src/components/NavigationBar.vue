@@ -495,9 +495,17 @@ const filteredMenuChildren = (item) => {
   }
   
   const filtered = item.children.filter(c => {
+    // 对于子菜单，只要有path就可以显示（不强制要求type必须是'menu'）
+    // 因为很多功能菜单（type='function'）也需要作为子菜单显示在导航栏中
     const hasPath = !!c.path;
     const isMenuType = c.type === 'menu';
-    const shouldInclude = hasPath && isMenuType;
+    const hasChildren = c.children && c.children.length > 0;
+    
+    // 允许显示的条件：
+    // 1. 有path且type是menu
+    // 2. 有path且是子菜单项（有children）
+    // 3. 有path且type是function（功能菜单也需要显示）
+    const shouldInclude = hasPath && (isMenuType || hasChildren || c.type === 'function');
     
     if ((item.name === '客户管理' || String(item.id) === '550e8400-e29b-41d4-a716-446655440012' ||
          item.name === '申请管理' || String(item.id) === '550e8400-e29b-41d4-a716-446655440003') && !shouldInclude) {
