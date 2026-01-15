@@ -14,12 +14,6 @@ const routes = [
     component: () => import('../views/LoginView.vue')
   },
   {
-    path: '/test-persistence',
-    name: 'TestPersistence',
-    component: () => import('../components/TestPersistence.vue'),
-    meta: { requiresAuth: false }
-  },
-  {
     path: '/users',
     name: 'UserManagement',
     component: () => import('../views/user/UserManagement.vue'),
@@ -78,6 +72,18 @@ const routes = [
     path: '/business/contact-records',
     name: 'ContactRecordManagement',
     component: () => import('../views/business/ContactRecordManagement.vue')
+  },
+  {
+    path: '/business/base-materials',
+    name: 'BaseMaterialManagement',
+    component: () => import('../views/business/BaseMaterialManagement.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/system/database-compare',
+    name: 'DatabaseCompare',
+    component: () => import('../views/system/DatabaseCompare.vue'),
+    meta: { requiresAuth: true }
   },
   {
     path: '/approval/expenses',

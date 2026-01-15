@@ -20,7 +20,7 @@
           <div class="hidden md:block flex-1">
             <div class="flex items-baseline space-x-2 ml-8">
               <!-- 一级菜单项 -->
-              <template v-for="item in menuItems" :key="item.name">
+              <template v-for="item in menuItems" :key="item.id || item.name">
                 <div class="relative group" v-if="item.children && item.children.length > 0">
                   <!-- 有子菜单的项 -->
                   <div class="relative group">
@@ -33,13 +33,62 @@
                     </button>
                     
                     <!-- 二级下拉菜单 - 鼠标悬停显示 -->
-                    <div class="absolute top-full left-0 mt-2 w-48 dropdown-glass rounded-2xl py-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300">
-                      <template v-for="child in item.children" :key="child.name">
+                    <div class="absolute top-full left-0 mt-2 w-48 dropdown-glass rounded-2xl py-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50">
+                      <!-- 过滤并排序：只显示type='menu'的菜单项，按sort_order排序 -->
+                      <template v-for="child in filteredMenuChildren(item)" :key="child.id || child.name">
+                        <!-- 有三级子菜单的项 -->
+                        <div v-if="child.children && filteredMenuChildren(child).length > 0" class="relative group/submenu">
+                          <!-- 如果有path，点击可以跳转；同时鼠标悬停显示子菜单 -->
+                          <router-link
+                            v-if="child.path"
+                            :to="child.path"
+                            class="block px-4 py-3 text-sm text-gray-300 hover:text-white transition-all duration-300 flex items-center dropdown-item-hover"
+                          >
+                            <i :class="child.icon || 'fas fa-circle'" class="mr-3 text-gray-400"></i>
+                            <span class="flex-1">{{ child.name }}</span>
+                            <i class="fas fa-chevron-right ml-2 text-xs"></i>
+                            <span v-if="child.badge" 
+                                  class="ml-auto bg-danger text-white text-xs px-2 py-1 rounded-full">
+                              {{ child.badge }}
+                            </span>
+                          </router-link>
+                          <!-- 如果没有path，只显示子菜单 -->
+                          <div
+                            v-else
+                            class="block px-4 py-3 text-sm text-gray-300 hover:text-white transition-all duration-300 flex items-center dropdown-item-hover cursor-pointer"
+                          >
+                            <i :class="child.icon || 'fas fa-circle'" class="mr-3 text-gray-400"></i>
+                            <span class="flex-1">{{ child.name }}</span>
+                            <i class="fas fa-chevron-right ml-2 text-xs"></i>
+                            <span v-if="child.badge" 
+                                  class="ml-auto bg-danger text-white text-xs px-2 py-1 rounded-full">
+                              {{ child.badge }}
+                            </span>
+                          </div>
+                          <!-- 三级下拉菜单 -->
+                          <div class="absolute left-full top-0 ml-2 w-48 dropdown-glass rounded-2xl py-2 opacity-0 invisible group-hover/submenu:opacity-100 group-hover/submenu:visible transition-all duration-300 z-50">
+                            <template v-for="grandchild in filteredMenuChildren(child)" :key="grandchild.id || grandchild.name">
+                              <router-link
+                                :to="grandchild.path"
+                                class="block px-4 py-3 text-sm text-gray-300 hover:text-white transition-all duration-300 flex items-center dropdown-item-hover"
+                              >
+                                <i :class="grandchild.icon || 'fas fa-circle'" class="mr-3 text-gray-400"></i>
+                                {{ grandchild.name }}
+                                <span v-if="grandchild.badge" 
+                                      class="ml-auto bg-danger text-white text-xs px-2 py-1 rounded-full">
+                                  {{ grandchild.badge }}
+                                </span>
+                              </router-link>
+                            </template>
+                          </div>
+                        </div>
+                        <!-- 无三级子菜单的项 - 直接跳转 -->
                         <router-link
+                          v-else
                           :to="child.path"
                           class="block px-4 py-3 text-sm text-gray-300 hover:text-white transition-all duration-300 flex items-center dropdown-item-hover"
                         >
-                          <i :class="child.icon" class="mr-3 text-gray-400"></i>
+                          <i :class="child.icon || 'fas fa-circle'" class="mr-3 text-gray-400"></i>
                           {{ child.name }}
                           <span v-if="child.badge" 
                                 class="ml-auto bg-danger text-white text-xs px-2 py-1 rounded-full">
@@ -308,6 +357,97 @@ const passwordForm = ref({
 const menuItems = computed(() => {
   const dynamicMenus = userStore.userMenus || [];
   
+  // 调试：输出菜单数据
+  console.log('=== 前端菜单数据调试 ===');
+  console.log('菜单总数:', dynamicMenus.length);
+  
+  // 输出所有顶级菜单
+  console.log('所有顶级菜单:', dynamicMenus.map(m => ({
+    id: m.id,
+    name: m.name,
+    path: m.path,
+    type: m.type,
+    hasChildren: !!m.children,
+    childrenCount: m.children?.length || 0
+  })));
+  
+  // 查找客户管理菜单
+  const findMenu = (menus, targetId, parentPath = '') => {
+    for (const menu of menus) {
+      const currentPath = parentPath ? `${parentPath} > ${menu.name}` : menu.name;
+      if (String(menu.id) === String(targetId)) {
+        console.log(`✅ 找到客户管理菜单，路径: ${currentPath}`);
+        return { menu, path: currentPath };
+      }
+      if (menu.children && menu.children.length > 0) {
+        const found = findMenu(menu.children, targetId, currentPath);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+  
+  const customerManagementResult = findMenu(dynamicMenus, '550e8400-e29b-41d4-a716-446655440012');
+  if (customerManagementResult) {
+    const customerManagementMenu = customerManagementResult.menu;
+    console.log('客户管理菜单:', customerManagementMenu.name);
+    console.log('客户管理菜单位置:', customerManagementResult.path);
+    console.log('客户管理子菜单数量:', customerManagementMenu.children?.length || 0);
+    console.log('客户管理子菜单完整列表:', customerManagementMenu.children || []);
+    
+    // 检查客户管理菜单的父菜单
+    const findParent = (menus, targetId, parent = null) => {
+      for (const menu of menus) {
+        if (String(menu.id) === String(targetId)) {
+          return parent;
+        }
+        if (menu.children && menu.children.length > 0) {
+          const found = findParent(menu.children, targetId, menu);
+          if (found !== null) return found;
+        }
+      }
+      return null;
+    };
+    const parentMenu = findParent(dynamicMenus, '550e8400-e29b-41d4-a716-446655440012');
+    if (parentMenu) {
+      console.log('客户管理菜单的父菜单:', parentMenu.name, parentMenu.id);
+      console.log('父菜单是否有子菜单:', !!parentMenu.children, parentMenu.children?.length || 0);
+    } else {
+      console.log('客户管理菜单是顶级菜单');
+    }
+    
+    // 详细输出每个子菜单
+    if (customerManagementMenu.children && customerManagementMenu.children.length > 0) {
+      customerManagementMenu.children.forEach((child, index) => {
+        console.log(`子菜单 ${index + 1}:`, {
+          id: child.id,
+          name: child.name,
+          path: child.path,
+          icon: child.icon,
+          type: child.type,
+          sort_order: child.sort_order,
+          hasChildren: !!child.children,
+          childrenCount: child.children?.length || 0
+        });
+      });
+      
+      // 检查"数据库对比"菜单
+      const databaseCompareMenu = customerManagementMenu.children.find(c => 
+        String(c.id) === '550e8400-e29b-41d4-a716-446655440019' || 
+        c.name === '数据库对比'
+      );
+      if (databaseCompareMenu) {
+        console.log('✅ 找到数据库对比菜单:', databaseCompareMenu);
+      } else {
+        console.log('❌ 未找到数据库对比菜单');
+        console.log('所有子菜单ID:', customerManagementMenu.children.map(c => c.id));
+        console.log('所有子菜单名称:', customerManagementMenu.children.map(c => c.name));
+      }
+    }
+  } else {
+    console.log('❌ 未找到客户管理菜单');
+  }
+  
   // 添加日志管理菜单（作为动态菜单的补充）
   const logManagementMenu = {
   };
@@ -321,6 +461,108 @@ const menuItems = computed(() => {
   return dynamicMenus;
 }); 
 
+// 过滤菜单子项：只显示type='menu'且有path的菜单项
+const filteredMenuChildren = (item) => {
+  // 记录所有调用，特别是客户管理相关的
+  if (item.name === '客户管理' || String(item.id) === '550e8400-e29b-41d4-a716-446655440012' || 
+      item.name === '申请管理' || item.name === '业务管理') {
+    console.log('🔍 filteredMenuChildren 被调用，菜单:', item.name, item.id);
+  }
+  
+  if (!item.children || !Array.isArray(item.children)) {
+    if (item.name === '客户管理' || String(item.id) === '550e8400-e29b-41d4-a716-446655440012') {
+      console.log('❌ 客户管理菜单没有子菜单或子菜单不是数组');
+    }
+    return [];
+  }
+  
+  // 详细日志：输出所有子菜单信息（包括申请管理和客户管理）
+  if (item.name === '客户管理' || String(item.id) === '550e8400-e29b-41d4-a716-446655440012' ||
+      item.name === '申请管理' || String(item.id) === '550e8400-e29b-41d4-a716-446655440003') {
+    console.log(`=== ${item.name}子菜单过滤调试 ===`);
+    console.log('菜单ID:', item.id);
+    console.log('菜单名称:', item.name);
+    console.log('原始子菜单数量:', item.children.length);
+    console.log('原始子菜单列表:', item.children.map(c => ({
+      id: c.id,
+      name: c.name,
+      path: c.path,
+      type: c.type,
+      sort_order: c.sort_order,
+      hasPath: !!c.path,
+      isMenuType: c.type === 'menu'
+    })));
+  }
+  
+  const filtered = item.children.filter(c => {
+    const hasPath = !!c.path;
+    const isMenuType = c.type === 'menu';
+    const shouldInclude = hasPath && isMenuType;
+    
+    if ((item.name === '客户管理' || String(item.id) === '550e8400-e29b-41d4-a716-446655440012' ||
+         item.name === '申请管理' || String(item.id) === '550e8400-e29b-41d4-a716-446655440003') && !shouldInclude) {
+      console.log(`过滤掉菜单项: ${c.name} (path: ${c.path || '无'}, type: ${c.type || '无'})`);
+    }
+    
+    return shouldInclude;
+  });
+  
+  const sorted = filtered.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  
+  if (item.name === '客户管理' || String(item.id) === '550e8400-e29b-41d4-a716-446655440012' ||
+      item.name === '申请管理' || String(item.id) === '550e8400-e29b-41d4-a716-446655440003') {
+    console.log('过滤后的菜单数量:', sorted.length);
+    console.log('过滤后的菜单列表:', sorted.map(m => ({
+      id: m.id,
+      name: m.name, 
+      path: m.path, 
+      type: m.type,
+      sort_order: m.sort_order
+    })));
+    
+    // 检查"客户管理"是否在申请管理的过滤后的列表中
+    if (item.name === '申请管理' || String(item.id) === '550e8400-e29b-41d4-a716-446655440003') {
+      const customerManagementInFiltered = sorted.find(m => String(m.id) === '550e8400-e29b-41d4-a716-446655440012' || m.name === '客户管理');
+      if (customerManagementInFiltered) {
+        console.log('✅ 客户管理在申请管理的过滤后的列表中:', customerManagementInFiltered);
+      } else {
+        console.log('❌ 客户管理不在申请管理的过滤后的列表中');
+        console.log('可能原因: path为空或type不是menu');
+        const customerManagementInOriginal = item.children.find(c => String(c.id) === '550e8400-e29b-41d4-a716-446655440012' || c.name === '客户管理');
+        if (customerManagementInOriginal) {
+          console.log('客户管理原始数据:', {
+            path: customerManagementInOriginal.path,
+            type: customerManagementInOriginal.type,
+            hasPath: !!customerManagementInOriginal.path,
+            isMenuType: customerManagementInOriginal.type === 'menu'
+          });
+        }
+      }
+    }
+    
+    // 检查"数据库对比"是否在客户管理的过滤后的列表中
+    if (item.name === '客户管理' || String(item.id) === '550e8400-e29b-41d4-a716-446655440012') {
+      const dbCompareInFiltered = sorted.find(m => String(m.id) === '550e8400-e29b-41d4-a716-446655440019' || m.name === '数据库对比');
+      if (dbCompareInFiltered) {
+        console.log('✅ 数据库对比在客户管理的过滤后的列表中:', dbCompareInFiltered);
+      } else {
+        console.log('❌ 数据库对比不在客户管理的过滤后的列表中');
+        console.log('可能原因: path为空或type不是menu');
+        const dbCompareInOriginal = item.children.find(c => String(c.id) === '550e8400-e29b-41d4-a716-446655440019' || c.name === '数据库对比');
+        if (dbCompareInOriginal) {
+          console.log('数据库对比原始数据:', {
+            path: dbCompareInOriginal.path,
+            type: dbCompareInOriginal.type,
+            hasPath: !!dbCompareInOriginal.path,
+            isMenuType: dbCompareInOriginal.type === 'menu'
+          });
+        }
+      }
+    }
+  }
+  
+  return sorted;
+};
 
 // 切换移动端菜单
 const toggleMobileMenu = () => {

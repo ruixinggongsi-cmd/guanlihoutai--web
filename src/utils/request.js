@@ -12,10 +12,12 @@ const API_CONFIG = {
 // 创建axios实例
 const service = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL,
-  timeout: 10000, // 请求超时时间
+  timeout: 300000, // 请求超时时间（5分钟，百万级数据对比需要更长时间）
   headers: {
     'Content-Type': 'application/json'
-  }
+  },
+  maxContentLength: 500 * 1024 * 1024, // 500MB
+  maxBodyLength: 500 * 1024 * 1024 // 500MB
 })
 
 // 生成随机字符串
@@ -167,8 +169,14 @@ service.interceptors.response.use(
         case 504:
           message = '网关超时'
           break
+        case 500:
+          // 服务器内部错误，尝试获取详细错误信息
+          const errorData = error.response.data
+          message = errorData?.error || errorData?.message || `服务器内部错误 (${status})`
+          console.error('服务器500错误详情:', errorData)
+          break
         default:
-          message = error.response.data?.message || `服务器错误 (${status})`
+          message = error.response.data?.message || error.response.data?.error || `服务器错误 (${status})`
       }
     } else if (error.request) {
       // 请求已发出，但没有收到响应
