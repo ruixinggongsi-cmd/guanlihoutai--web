@@ -639,9 +639,10 @@ const newContactRecord = ref({
 })
 const contactRecordsLoading = ref(false)
 
-// 计算属性
-const totalCustomers = computed(() => customers.value.length)
+// 响应式数据 - 总记录数
+const totalCustomers = ref(0)
 
+// 计算属性
 const activeCustomers = computed(() => 
   customers.value.filter(customer => customer.status === 'active').length
 )
@@ -661,35 +662,9 @@ const newCustomersThisMonth = computed(() => {
   }).length
 })
 
+// 直接使用API返回的数据，不需要再次筛选和分页（筛选和分页已在后端完成）
 const filteredCustomers = computed(() => {
-  let filtered = customers.value
-  
-  // 搜索筛选
-  if (searchKeyword.value) {
-    const keyword = searchKeyword.value.toLowerCase()
-    filtered = filtered.filter(customer => 
-      customer.name.toLowerCase().includes(keyword) ||
-      customer.phone.includes(keyword) ||
-      (customer.email && customer.email.toLowerCase().includes(keyword))
-    )
-  }
-  
-  // 状态筛选
-  if (statusFilter.value) {
-    filtered = filtered.filter(customer => customer.status === statusFilter.value)
-  }
-  
-  // 日期筛选
-  if (startDate.value) {
-    const filterDate = new Date(startDate.value)
-    filtered = filtered.filter(customer => new Date(customer.createdAt) >= filterDate)
-  }
-  
-  // 分页
-  const start = (currentPage.value - 1) * pageSize.value
-  const end = start + pageSize.value
-  
-  return filtered.slice(start, end)
+  return customers.value
 })
 
 // 方法
@@ -710,7 +685,12 @@ const loadData = async () => {
         ...customer,
         createdAt: customer.created_at
       }))
-      totalCustomers.value = response.pagination.total
+      // 从API返回的分页信息中获取总数
+      if (response.pagination && response.pagination.total !== undefined) {
+        totalCustomers.value = response.pagination.total
+      } else {
+        totalCustomers.value = customers.value.length
+      }
     } else {
       ElMessage.error({message: response.message || '获取客户列表失败', duration: 1000})
     }
