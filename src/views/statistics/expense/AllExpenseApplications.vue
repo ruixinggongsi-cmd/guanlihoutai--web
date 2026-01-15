@@ -461,9 +461,19 @@ const filters = reactive({
 
 // 加载数据
 const loadData = async () => {
-  if (!props.startDate || !props.endDate) {
-    console.log('[所有申请记录] 日期未设置，跳过加载', { startDate: props.startDate, endDate: props.endDate })
-    return
+  // 如果没有设置日期范围，使用默认日期范围（最近一年）
+  let startDate = props.startDate
+  let endDate = props.endDate
+  
+  if (!startDate || !endDate) {
+    const today = new Date()
+    const oneYearAgo = new Date()
+    oneYearAgo.setFullYear(today.getFullYear() - 1)
+    
+    startDate = startDate || oneYearAgo.toISOString().split('T')[0]
+    endDate = endDate || today.toISOString().split('T')[0]
+    
+    console.log('[所有申请记录] 使用默认日期范围', { startDate, endDate })
   }
 
   try {
@@ -474,8 +484,8 @@ const loadData = async () => {
     const params = {
       page: pagination.page,
       pageSize: pagination.pageSize,
-      start_date: props.startDate,
-      end_date: props.endDate,
+      start_date: startDate,
+      end_date: endDate,
       keyword: filters.keyword || undefined,
       status: filters.status !== 'all' ? filters.status : undefined,
       applicant_name: filters.applicantName || undefined  // 添加申请人姓名/用户名筛选参数
@@ -722,16 +732,12 @@ const handleDelete = async (item) => {
 
 // 监听日期变化
 watch([() => props.startDate, () => props.endDate], () => {
-  if (props.startDate && props.endDate) {
-    pagination.page = 1
-    loadData()
-  }
+  pagination.page = 1
+  loadData()
 }, { immediate: true })
 
 onMounted(() => {
-  if (props.startDate && props.endDate) {
-    loadData()
-  }
+  loadData()
 })
 </script>
 
