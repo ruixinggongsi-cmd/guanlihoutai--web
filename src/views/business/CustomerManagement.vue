@@ -65,9 +65,9 @@
               class="px-4 py-3 bg-white/5 border border-white/20 rounded-xl text-white focus:ring-2 focus:ring-primary focus:border-transparent transition-all duration-300"
             >
               <option value="" class="bg-slate-800">所有状态</option>
-              <option value="active" class="bg-slate-800">活跃</option>
-              <option value="inactive" class="bg-slate-800">非活跃</option>
-              <option value="vip" class="bg-slate-800">VIP</option>
+              <option value="active" class="bg-slate-800">数据</option>
+              <option value="inactive" class="bg-slate-800">意向客户</option>
+              <option value="vip" class="bg-slate-800">进群客户</option>
             </select>
             <input
               v-model="startDate"
@@ -255,9 +255,9 @@
                 required
                 class="w-full px-4 py-3 bg-white/5 border border-white/20 rounded-xl text-white focus:ring-2 focus:ring-primary focus:border-transparent transition-all duration-300"
               >
-                <option value="active" class="bg-slate-800">活跃</option>
-                <option value="inactive" class="bg-slate-800">未活跃</option>
-                <option value="vip" class="bg-slate-800">VIP</option>
+                <option value="active" class="bg-slate-800">数据</option>
+                <option value="inactive" class="bg-slate-800">意向客户</option>
+                <option value="vip" class="bg-slate-800">进群客户</option>
               </select>
             </div>
             <div>
@@ -886,18 +886,30 @@ const addContactRecord = async () => {
 
 const getStatusClass = (status) => {
   const classes = {
-    active: 'bg-green-500/20 text-green-400',
-    inactive: 'bg-gray-500/20 text-gray-400',
-    vip: 'bg-yellow-500/20 text-yellow-400'
+    active: 'bg-blue-500/20 text-blue-400',
+    inactive: 'bg-yellow-500/20 text-yellow-400',
+    vip: 'bg-green-500/20 text-green-400',
+    // 兼容旧数据的状态值
+    data: 'bg-blue-500/20 text-blue-400',
+    group: 'bg-green-500/20 text-green-400',
+    '意向客户': 'bg-yellow-500/20 text-yellow-400',
+    '进群客户': 'bg-green-500/20 text-green-400',
+    '数据': 'bg-blue-500/20 text-blue-400'
   }
   return classes[status] || 'bg-gray-500/20 text-gray-400'
 }
 
 const getStatusText = (status) => {
   const texts = {
-    active: '活跃',
-    inactive: '非活跃',
-    vip: 'VIP'
+    active: '数据',
+    inactive: '意向客户',
+    vip: '进群客户',
+    // 兼容旧数据的状态值
+    data: '数据',
+    group: '进群客户',
+    '意向客户': '意向客户',
+    '进群客户': '进群客户',
+    '数据': '数据'
   }
   return texts[status] || status
 }

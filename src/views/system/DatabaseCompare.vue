@@ -277,6 +277,7 @@
                   <th class="px-4 py-3 text-left text-sm font-semibold text-gray-300">邮箱</th>
                   <th class="px-4 py-3 text-left text-sm font-semibold text-gray-300">公司</th>
                   <th class="px-4 py-3 text-left text-sm font-semibold text-gray-300">地址</th>
+                  <th class="px-4 py-3 text-left text-sm font-semibold text-gray-300">状态</th>
                   <th class="px-4 py-3 text-left text-sm font-semibold text-gray-300">操作</th>
                 </tr>
               </thead>
@@ -327,6 +328,16 @@
                     >
                   </td>
                   <td class="px-4 py-3">
+                    <select 
+                      v-model="customer.status"
+                      class="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary"
+                    >
+                      <option value="数据" class="bg-slate-800">数据</option>
+                      <option value="意向客户" class="bg-slate-800">意向客户</option>
+                      <option value="进群客户" class="bg-slate-800">进群客户</option>
+                    </select>
+                  </td>
+                  <td class="px-4 py-3">
                     <button 
                       @click="removeRowByIndex((currentPage - 1) * pageSize + index)"
                       class="px-3 py-1 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
@@ -336,7 +347,7 @@
                   </td>
                 </tr>
                 <tr v-if="customerList.length === 0">
-                  <td colspan="6" class="px-4 py-8 text-center text-gray-400">
+                  <td colspan="7" class="px-4 py-8 text-center text-gray-400">
                     <i class="fas fa-inbox text-4xl mb-2 opacity-50"></i>
                     <p>暂无数据，请上传文件或手动输入</p>
                   </td>
@@ -350,11 +361,12 @@
             <table class="w-full">
               <thead class="bg-white/5 border-b border-white/20">
                 <tr>
-                  <th class="px-4 py-3 text-left text-sm font-semibold text-gray-300">状态</th>
+                  <th class="px-4 py-3 text-left text-sm font-semibold text-gray-300">对比状态</th>
                   <th class="px-4 py-3 text-left text-sm font-semibold text-gray-300">姓名</th>
                   <th class="px-4 py-3 text-left text-sm font-semibold text-gray-300">电话</th>
                   <th class="px-4 py-3 text-left text-sm font-semibold text-gray-300">邮箱</th>
                   <th class="px-4 py-3 text-left text-sm font-semibold text-gray-300">公司</th>
+                  <th class="px-4 py-3 text-left text-sm font-semibold text-gray-300">客户状态</th>
                   <th class="px-4 py-3 text-left text-sm font-semibold text-gray-300">匹配信息</th>
                 </tr>
               </thead>
@@ -389,6 +401,18 @@
                   <td class="px-4 py-3 text-gray-300">{{ result.phone || '-' }}</td>
                   <td class="px-4 py-3 text-gray-300">{{ result.email || '-' }}</td>
                   <td class="px-4 py-3 text-gray-300">{{ result.company || '-' }}</td>
+                  <td class="px-4 py-3">
+                    <span 
+                      :class="{
+                        'px-2 py-1 bg-blue-500/20 text-blue-400 rounded text-xs': result.status === '数据',
+                        'px-2 py-1 bg-yellow-500/20 text-yellow-400 rounded text-xs': result.status === '意向客户',
+                        'px-2 py-1 bg-green-500/20 text-green-400 rounded text-xs': result.status === '进群客户'
+                      }"
+                      class="font-semibold"
+                    >
+                      {{ result.status || '数据' }}
+                    </span>
+                  </td>
                   <td class="px-4 py-3">
                     <div v-if="result.isDuplicate && result.matchedCustomers.length > 0" class="space-y-2">
                       <div 
@@ -523,10 +547,10 @@ const loadDatabaseStats = async () => {
 const downloadTemplate = () => {
   // 创建模板数据
   const templateData = [
-    ['姓名', '电话', '邮箱', '公司', '地址', '备注'],
-    ['张三', '13800138000', 'zhangsan@example.com', '示例公司', '北京市朝阳区', '示例备注'],
-    ['李四', '13900139000', 'lisi@example.com', '测试公司', '上海市浦东新区', ''],
-    ['王五', '13700137000', '', '演示公司', '广州市天河区', '无邮箱']
+    ['姓名', '电话', '邮箱', '公司', '地址', '状态', '备注'],
+    ['张三', '13800138000', 'zhangsan@example.com', '示例公司', '北京市朝阳区', '数据', '示例备注'],
+    ['李四', '13900139000', 'lisi@example.com', '测试公司', '上海市浦东新区', '意向客户', ''],
+    ['王五', '13700137000', '', '演示公司', '广州市天河区', '进群客户', '无邮箱']
   ]
   
   // 创建工作簿
@@ -540,6 +564,7 @@ const downloadTemplate = () => {
     { wch: 25 }, // 邮箱
     { wch: 20 }, // 公司
     { wch: 25 }, // 地址
+    { wch: 12 }, // 状态
     { wch: 20 }  // 备注
   ]
   
@@ -580,7 +605,7 @@ const downloadNewCustomers = () => {
   
   // 准备数据
   const data = [
-    ['姓名', '电话', '邮箱', '公司', '状态', '备注']
+    ['姓名', '电话', '邮箱', '公司', '地址', '客户状态', '对比状态', '备注']
   ]
   
   newCustomers.forEach(customer => {
@@ -589,6 +614,8 @@ const downloadNewCustomers = () => {
       customer.phone || '',
       customer.email || '',
       customer.company || '',
+      customer.address || '',
+      customer.status || '数据',
       '新增',
       customer.duplicateReason || ''
     ])
@@ -604,7 +631,9 @@ const downloadNewCustomers = () => {
     { wch: 15 }, // 电话
     { wch: 25 }, // 邮箱
     { wch: 20 }, // 公司
-    { wch: 10 }, // 状态
+    { wch: 25 }, // 地址
+    { wch: 12 }, // 客户状态
+    { wch: 10 }, // 对比状态
     { wch: 30 }  // 备注
   ]
   
@@ -622,7 +651,7 @@ const downloadNewCustomers = () => {
   
   // 设置数据行样式（新增数据用浅绿色背景）
   for (let row = 1; row <= newCustomers.length; row++) {
-    for (let col = 0; col < 6; col++) {
+    for (let col = 0; col < 8; col++) {
       const cellAddress = XLSX.utils.encode_cell({ r: row, c: col })
       if (ws[cellAddress]) {
         if (!ws[cellAddress].s) ws[cellAddress].s = {}
@@ -656,7 +685,7 @@ const downloadDuplicates = () => {
   
   // 准备数据
   const data = [
-    ['姓名', '电话', '邮箱', '公司', '状态', '匹配信息', '匹配客户姓名', '匹配客户电话', '匹配客户邮箱', '创建者', '创建时间']
+    ['姓名', '电话', '邮箱', '公司', '地址', '客户状态', '对比状态', '匹配信息', '匹配客户姓名', '匹配客户电话', '匹配客户邮箱', '创建者', '创建时间']
   ]
   
   duplicates.forEach(customer => {
@@ -669,6 +698,8 @@ const downloadDuplicates = () => {
       customer.phone || '',
       customer.email || '',
       customer.company || '',
+      customer.address || '',
+      customer.status || '数据',
       '重复',
       customer.duplicateReason || '',
       firstMatch ? (firstMatch.name || '') : '',
@@ -687,7 +718,9 @@ const downloadDuplicates = () => {
           '', // 电话留空
           '', // 邮箱留空
           '', // 公司留空
-          '', // 状态留空
+          '', // 地址留空
+          '', // 客户状态留空
+          '', // 对比状态留空
           `匹配记录 ${i + 1}`, // 匹配信息
           match.name || '',
           match.phone || '',
@@ -709,7 +742,9 @@ const downloadDuplicates = () => {
     { wch: 15 }, // 电话
     { wch: 25 }, // 邮箱
     { wch: 20 }, // 公司
-    { wch: 10 }, // 状态
+    { wch: 25 }, // 地址
+    { wch: 12 }, // 客户状态
+    { wch: 10 }, // 对比状态
     { wch: 30 }, // 匹配信息
     { wch: 15 }, // 匹配客户姓名
     { wch: 15 }, // 匹配客户电话
@@ -733,7 +768,7 @@ const downloadDuplicates = () => {
     // 设置数据行样式（重复数据用浅红色背景）
     let currentRow = 1
     duplicates.forEach(customer => {
-      for (let col = 0; col < 11; col++) {
+      for (let col = 0; col < 13; col++) {
         const cellAddress = XLSX.utils.encode_cell({ r: currentRow, c: col })
         if (ws[cellAddress]) {
           if (!ws[cellAddress].s) ws[cellAddress].s = {}
@@ -745,7 +780,7 @@ const downloadDuplicates = () => {
       // 如果有多个匹配，其他匹配行用更浅的背景
       if (customer.matchedCustomers && customer.matchedCustomers.length > 1) {
         for (let i = 1; i < customer.matchedCustomers.length; i++) {
-          for (let col = 0; col < 11; col++) {
+          for (let col = 0; col < 13; col++) {
             const cellAddress = XLSX.utils.encode_cell({ r: currentRow, c: col })
             if (ws[cellAddress]) {
               if (!ws[cellAddress].s) ws[cellAddress].s = {}
@@ -781,7 +816,7 @@ const downloadAllResults = () => {
   // 新增客户工作表
   if (newCustomers.length > 0) {
     const newData = [
-      ['姓名', '电话', '邮箱', '公司', '状态', '备注']
+      ['姓名', '电话', '邮箱', '公司', '地址', '客户状态', '对比状态', '备注']
     ]
     
     newCustomers.forEach(customer => {
@@ -790,6 +825,8 @@ const downloadAllResults = () => {
         customer.phone || '',
         customer.email || '',
         customer.company || '',
+        customer.address || '',
+        customer.status || '数据',
         '新增',
         customer.duplicateReason || ''
       ])
@@ -797,7 +834,7 @@ const downloadAllResults = () => {
     
     const wsNew = XLSX.utils.aoa_to_sheet(newData)
     wsNew['!cols'] = [
-      { wch: 15 }, { wch: 15 }, { wch: 25 }, { wch: 20 }, { wch: 10 }, { wch: 30 }
+      { wch: 15 }, { wch: 15 }, { wch: 25 }, { wch: 20 }, { wch: 25 }, { wch: 12 }, { wch: 10 }, { wch: 30 }
     ]
     
     // 设置表头样式
@@ -819,7 +856,7 @@ const downloadAllResults = () => {
   // 重复客户工作表
   if (duplicates.length > 0) {
     const dupData = [
-      ['姓名', '电话', '邮箱', '公司', '状态', '匹配信息', '匹配客户姓名', '匹配客户电话', '匹配客户邮箱', '创建者', '创建时间']
+      ['姓名', '电话', '邮箱', '公司', '地址', '客户状态', '对比状态', '匹配信息', '匹配客户姓名', '匹配客户电话', '匹配客户邮箱', '创建者', '创建时间']
     ]
     
     duplicates.forEach(customer => {
@@ -832,6 +869,8 @@ const downloadAllResults = () => {
         customer.phone || '',
         customer.email || '',
         customer.company || '',
+        customer.address || '',
+        customer.status || '数据',
         '重复',
         customer.duplicateReason || '',
         firstMatch ? (firstMatch.name || '') : '',
@@ -846,7 +885,7 @@ const downloadAllResults = () => {
         for (let i = 1; i < customer.matchedCustomers.length; i++) {
           const match = customer.matchedCustomers[i]
           dupData.push([
-            '', '', '', '', '', `匹配记录 ${i + 1}`,
+            '', '', '', '', '', '', '', `匹配记录 ${i + 1}`,
             match.name || '',
             match.phone || '',
             match.email || '',
@@ -859,7 +898,7 @@ const downloadAllResults = () => {
     
     const wsDup = XLSX.utils.aoa_to_sheet(dupData)
     wsDup['!cols'] = [
-      { wch: 15 }, { wch: 15 }, { wch: 25 }, { wch: 20 }, { wch: 10 }, 
+      { wch: 15 }, { wch: 15 }, { wch: 25 }, { wch: 20 }, { wch: 25 }, { wch: 12 }, { wch: 10 }, 
       { wch: 30 }, { wch: 15 }, { wch: 15 }, { wch: 25 }, { wch: 15 }, { wch: 20 }
     ]
     
@@ -908,6 +947,7 @@ const handleFileUpload = async (event) => {
       email: row['邮箱'] || row['email'] || row['Email'] || '',
       company: row['公司'] || row['company'] || row['Company'] || '',
       address: row['地址'] || row['address'] || row['Address'] || '',
+      status: row['状态'] || row['status'] || row['Status'] || '数据',
       notes: row['备注'] || row['notes'] || row['Notes'] || ''
     })).filter(c => c.name || c.phone || c.email) // 过滤空行
     
@@ -925,6 +965,7 @@ const addNewRow = () => {
     email: '',
     company: '',
     address: '',
+    status: '数据',
     notes: ''
   })
 }
@@ -966,7 +1007,8 @@ const startCompare = async () => {
       name: c.name || '',
       phone: String(c.phone).trim(),
       email: c.email || '',
-      company: c.company || ''
+      company: c.company || '',
+      status: c.status || '数据'
     }))
     
     // 如果数据量小于5万条，直接一次性对比
@@ -1154,6 +1196,7 @@ const saveNewCustomersToDatabase = async () => {
         email: customer.email || originalCustomer?.email || '', // 可以为空
         company: customer.company || originalCustomer?.company || '', // 可以为空
         address: originalCustomer?.address || '', // 可以为空
+        status: customer.status || originalCustomer?.status || '数据', // 客户状态
         notes: originalCustomer?.notes || '' // 可以为空
       })
     }
