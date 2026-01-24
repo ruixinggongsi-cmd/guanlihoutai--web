@@ -403,14 +403,10 @@
                   <td class="px-4 py-3 text-gray-300">{{ result.company || '-' }}</td>
                   <td class="px-4 py-3">
                     <span 
-                      :class="{
-                        'px-2 py-1 bg-blue-500/20 text-blue-400 rounded text-xs': result.status === '数据',
-                        'px-2 py-1 bg-yellow-500/20 text-yellow-400 rounded text-xs': result.status === '意向客户',
-                        'px-2 py-1 bg-green-500/20 text-green-400 rounded text-xs': result.status === '进群客户'
-                      }"
-                      class="font-semibold"
+                      :class="getCustomerStatusClass(result.status)"
+                      class="px-2 py-1 rounded text-xs font-semibold"
                     >
-                      {{ result.status || '数据' }}
+                      {{ getCustomerStatusText(result.status) }}
                     </span>
                   </td>
                   <td class="px-4 py-3">
@@ -941,9 +937,30 @@ const handleFileUpload = async (event) => {
     const jsonData = XLSX.utils.sheet_to_json(firstSheet)
     
     // 转换为客户数据格式（支持中英文列名）
+    // 电话号码格式化函数：统一处理数字格式、科学计数法、字符串格式等
+    const formatPhone = (phoneValue) => {
+      if (!phoneValue && phoneValue !== 0) return ''
+      
+      // 转换为字符串
+      let phoneStr = String(phoneValue)
+      
+      // 处理科学计数法（如 1.21551e+10）
+      if (phoneStr.includes('e+') || phoneStr.includes('E+')) {
+        phoneStr = parseFloat(phoneStr).toString()
+      }
+      
+      // 去除所有非数字字符（保留数字）
+      phoneStr = phoneStr.replace(/\D/g, '')
+      
+      // 去除前导零（但保留至少一个数字）
+      phoneStr = phoneStr.replace(/^0+/, '') || '0'
+      
+      return phoneStr.trim()
+    }
+    
     customerList.value = jsonData.map(row => ({
       name: row['姓名'] || row['name'] || row['Name'] || '',
-      phone: String(row['电话'] || row['phone'] || row['Phone'] || ''),
+      phone: formatPhone(row['电话'] || row['phone'] || row['Phone'] || ''),
       email: row['邮箱'] || row['email'] || row['Email'] || '',
       company: row['公司'] || row['company'] || row['Company'] || '',
       address: row['地址'] || row['address'] || row['Address'] || '',
@@ -989,8 +1006,34 @@ const startCompare = async () => {
     return
   }
   
-  // 过滤有效数据（至少要有电话号码）
-  const validCustomers = customerList.value.filter(c => c.phone && String(c.phone).trim())
+  // 电话号码格式化函数：统一处理格式（与文件上传时保持一致）
+  const formatPhoneForCompare = (phoneValue) => {
+    if (!phoneValue && phoneValue !== 0) return ''
+    
+    // 转换为字符串
+    let phoneStr = String(phoneValue)
+    
+    // 处理科学计数法（如 1.21551e+10）
+    if (phoneStr.includes('e+') || phoneStr.includes('E+')) {
+      phoneStr = parseFloat(phoneStr).toString()
+    }
+    
+    // 去除所有非数字字符（保留数字）
+    phoneStr = phoneStr.replace(/\D/g, '')
+    
+    // 去除前导零（但保留至少一个数字）
+    phoneStr = phoneStr.replace(/^0+/, '') || '0'
+    
+    return phoneStr.trim()
+  }
+  
+  // 过滤有效数据（至少要有电话号码），并统一格式化电话号码
+  const validCustomers = customerList.value
+    .map(c => ({
+      ...c,
+      phone: formatPhoneForCompare(c.phone)
+    }))
+    .filter(c => c.phone && c.phone.length > 0)
   
   if (validCustomers.length === 0) {
     ElMessage.warning({message: '没有有效的客户数据（需要电话号码）', duration: 2000})
@@ -1001,11 +1044,12 @@ const startCompare = async () => {
   
   try {
     console.log('开始分批对比，总数据量:', validCustomers.length)
+    console.log('前3条电话号码示例:', validCustomers.slice(0, 3).map(c => ({原始: c.phone, 格式化后: c.phone})))
     
     // 只发送必要的字段，减少请求体大小
     const customerDataToSend = validCustomers.map(c => ({
       name: c.name || '',
-      phone: String(c.phone).trim(),
+      phone: c.phone, // 已经格式化过的电话号码
       email: c.email || '',
       company: c.company || '',
       status: c.status || '数据'
@@ -1387,6 +1431,38 @@ const formatDate = (dateString) => {
   } catch (error) {
     return dateString
   }
+}
+
+// 将数据库状态值转换为中文显示
+const getCustomerStatusText = (status) => {
+  const statusMap = {
+    active: '数据',
+    inactive: '意向客户',
+    vip: '进群客户',
+    // 兼容旧数据和中文状态值
+    data: '数据',
+    group: '进群客户',
+    '数据': '数据',
+    '意向客户': '意向客户',
+    '进群客户': '进群客户'
+  }
+  return statusMap[status] || '数据'
+}
+
+// 获取状态样式类
+const getCustomerStatusClass = (status) => {
+  const statusMap = {
+    active: 'bg-blue-500/20 text-blue-400',
+    inactive: 'bg-yellow-500/20 text-yellow-400',
+    vip: 'bg-green-500/20 text-green-400',
+    // 兼容旧数据和中文状态值
+    data: 'bg-blue-500/20 text-blue-400',
+    group: 'bg-green-500/20 text-green-400',
+    '数据': 'bg-blue-500/20 text-blue-400',
+    '意向客户': 'bg-yellow-500/20 text-yellow-400',
+    '进群客户': 'bg-green-500/20 text-green-400'
+  }
+  return statusMap[status] || 'bg-blue-500/20 text-blue-400'
 }
 
 // 监听数据变化，重置到第一页
