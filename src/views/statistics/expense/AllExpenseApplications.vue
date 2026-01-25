@@ -104,13 +104,69 @@
                   class="w-4 h-4 text-primary bg-white/10 border-white/20 rounded focus:ring-primary"
                 />
               </th>
-              <th class="px-4 py-3 text-gray-300 font-semibold">费用名称</th>
-              <th class="px-4 py-3 text-gray-300 font-semibold">申请人</th>
-              <th class="px-4 py-3 text-gray-300 font-semibold">部门</th>
-              <th class="px-4 py-3 text-gray-300 font-semibold">金额</th>
-              <th class="px-4 py-3 text-gray-300 font-semibold">日期</th>
-              <th class="px-4 py-3 text-gray-300 font-semibold">状态</th>
-              <th class="px-4 py-3 text-gray-300 font-semibold">创建时间</th>
+              <th 
+                class="px-4 py-3 text-gray-300 font-semibold cursor-pointer hover:text-white transition-colors select-none"
+                @click="handleSort('name')"
+              >
+                <div class="flex items-center space-x-2">
+                  <span>费用名称</span>
+                  <i :class="getSortIcon('name')" class="text-xs"></i>
+                </div>
+              </th>
+              <th 
+                class="px-4 py-3 text-gray-300 font-semibold cursor-pointer hover:text-white transition-colors select-none"
+                @click="handleSort('applicant')"
+              >
+                <div class="flex items-center space-x-2">
+                  <span>申请人</span>
+                  <i :class="getSortIcon('applicant')" class="text-xs"></i>
+                </div>
+              </th>
+              <th 
+                class="px-4 py-3 text-gray-300 font-semibold cursor-pointer hover:text-white transition-colors select-none"
+                @click="handleSort('department')"
+              >
+                <div class="flex items-center space-x-2">
+                  <span>部门</span>
+                  <i :class="getSortIcon('department')" class="text-xs"></i>
+                </div>
+              </th>
+              <th 
+                class="px-4 py-3 text-gray-300 font-semibold cursor-pointer hover:text-white transition-colors select-none"
+                @click="handleSort('amount')"
+              >
+                <div class="flex items-center space-x-2">
+                  <span>金额</span>
+                  <i :class="getSortIcon('amount')" class="text-xs"></i>
+                </div>
+              </th>
+              <th 
+                class="px-4 py-3 text-gray-300 font-semibold cursor-pointer hover:text-white transition-colors select-none"
+                @click="handleSort('date')"
+              >
+                <div class="flex items-center space-x-2">
+                  <span>日期</span>
+                  <i :class="getSortIcon('date')" class="text-xs"></i>
+                </div>
+              </th>
+              <th 
+                class="px-4 py-3 text-gray-300 font-semibold cursor-pointer hover:text-white transition-colors select-none"
+                @click="handleSort('status')"
+              >
+                <div class="flex items-center space-x-2">
+                  <span>状态</span>
+                  <i :class="getSortIcon('status')" class="text-xs"></i>
+                </div>
+              </th>
+              <th 
+                class="px-4 py-3 text-gray-300 font-semibold cursor-pointer hover:text-white transition-colors select-none"
+                @click="handleSort('created_at')"
+              >
+                <div class="flex items-center space-x-2">
+                  <span>创建时间</span>
+                  <i :class="getSortIcon('created_at')" class="text-xs"></i>
+                </div>
+              </th>
               <th class="px-4 py-3 text-gray-300 font-semibold text-center">操作</th>
             </tr>
           </thead>
@@ -414,6 +470,79 @@
                 </div>
               </div>
             </div>
+            
+            <!-- 审批记录 -->
+            <div class="mt-8">
+              <div class="flex items-center mb-6">
+                <div class="w-8 h-8 bg-gradient-to-r from-success to-success-light rounded-lg flex items-center justify-center mr-3">
+                  <i class="fas fa-route text-white text-sm"></i>
+                </div>
+                <h3 class="text-xl font-semibold text-white">审批记录</h3>
+              </div>
+              
+              <div class="bg-white/5 rounded-xl p-6 border border-white/10 backdrop-blur-sm">
+                <div v-if="loadingApprovalNodes" class="flex items-center justify-center py-6">
+                  <i class="fas fa-spinner fa-spin text-2xl text-gray-400"></i>
+                </div>
+                <div v-else-if="approvalNodes.length > 0" class="space-y-1">
+                  <div v-for="(node, index) in approvalNodes" :key="index" 
+                       class="flex items-start justify-between py-4 border-b border-white/10 last:border-b-0 hover:bg-white/5 transition-all duration-200 px-3">
+                    <div class="flex items-start space-x-4 flex-1">
+                      <div class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" :class="getApprovalNodeStatusClass(node.status)">
+                        <i :class="getApprovalNodeIcon(node.status)" class="text-white text-sm"></i>
+                      </div>
+                      <div class="flex-1 min-w-0">
+                        <div class="flex items-center space-x-3 mb-1">
+                          <div class="text-white font-medium text-sm">{{ node.nodeName || node.node_name || '审批节点' }}</div>
+                          <div class="font-medium text-xs px-2 py-0.5 rounded" :class="getApprovalNodeTextColor(node.status)">
+                            <span v-if="node.status === 'pending'">待审批</span>
+                            <span v-else-if="node.status === 'approving'">审批中</span>
+                            <span v-else-if="node.status === 'approved'">已通过</span>
+                            <span v-else-if="node.status === 'rejected'">已拒绝</span>
+                            <span v-else-if="node.status === 'auto_approved'">自动审批</span>
+                            <span v-else-if="node.is_current_node">审批中……</span>
+                            <span v-else>待审批</span>
+                          </div>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-gray-400 mb-2">
+                          <div class="flex items-center space-x-1">
+                            <i class="fas fa-user text-gray-500"></i>
+                            <span class="font-medium text-gray-300">审批人：</span>
+                            <span class="text-white font-semibold">
+                              {{ 
+                                node.user_info?.name || 
+                                node.user_info?.username || 
+                                node.userName || 
+                                node.user_name || 
+                                node.approver_name || 
+                                (node.user_id ? `用户ID: ${node.user_id}` : '未指定') 
+                              }}
+                            </span>
+                          </div>
+                          <div class="flex items-center space-x-1">
+                            <i class="fas fa-clock text-gray-500"></i>
+                            <span class="font-medium text-gray-300">审批时间：</span>
+                            <span class="text-white">{{ formatDateTime(node.createdAt || node.create_time || node.createTime || node.approvedAt || node.approved_at || node.approval_start_time || node.approval_end_time || node.updatedAt || node.update_time || node.updateTime) }}</span>
+                          </div>
+                        </div>
+                        <div v-if="node.comment" class="mt-2 p-2 bg-white/5 rounded-lg border border-white/10">
+                          <div class="flex items-start space-x-2">
+                            <i class="fas fa-comment text-gray-400 text-xs mt-0.5"></i>
+                            <div class="text-gray-300 text-xs leading-relaxed flex-1">{{ node.comment }}</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div v-else class="text-gray-400 text-center py-6">
+                  <div class="w-12 h-12 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-2 border border-white/10">
+                    <i class="fas fa-clipboard-list text-xl"></i>
+                  </div>
+                  <p class="text-sm">暂无审批记录</p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
         </div>
@@ -446,6 +575,8 @@ const applications = ref([])
 const selectedIds = ref([]) // 选中的ID列表
 const showViewModal = ref(false) // 查看详情模态框显示状态
 const viewingExpense = ref(null) // 当前查看的费用申请
+const approvalNodes = ref([]) // 审批节点数据
+const loadingApprovalNodes = ref(false) // 加载审批节点状态
 const pagination = reactive({
   page: 1,
   pageSize: 100,
@@ -457,6 +588,12 @@ const filters = reactive({
   status: 'all',
   applicantName: '',
   keyword: ''
+})
+
+// 排序相关
+const sortConfig = reactive({
+  field: '', // 当前排序字段
+  order: '' // 'asc' 或 'desc'
 })
 
 // 加载数据
@@ -522,17 +659,94 @@ const loadData = async () => {
   }
 }
 
-// 筛选后的申请记录
-// 注意：申请人筛选现在主要在后端进行，这里只做前端实时过滤（用于显示）
+// 筛选和排序后的申请记录
 const filteredApplications = computed(() => {
-  let result = applications.value
+  let result = [...applications.value] // 创建副本避免修改原数组
   
-  // 前端补充筛选（主要用于实时显示，后端已经做了主要筛选）
-  // 如果后端筛选不满足需求，可以在这里添加额外的筛选逻辑
-  // 目前后端已经处理了申请人筛选，所以这里不需要再次筛选
+  // 排序
+  if (sortConfig.field && sortConfig.order) {
+    result.sort((a, b) => {
+      let aValue, bValue
+      
+      switch (sortConfig.field) {
+        case 'name':
+          aValue = (a.name || '').toLowerCase()
+          bValue = (b.name || '').toLowerCase()
+          break
+        case 'applicant':
+          aValue = ((a.applicant_info?.name || a.applicant_name || '') || '').toLowerCase()
+          bValue = ((b.applicant_info?.name || b.applicant_name || '') || '').toLowerCase()
+          break
+        case 'department':
+          aValue = ((a.applicant_info?.department || '') || '').toLowerCase()
+          bValue = ((b.applicant_info?.department || '') || '').toLowerCase()
+          break
+        case 'amount':
+          aValue = parseFloat(a.amount || 0)
+          bValue = parseFloat(b.amount || 0)
+          break
+        case 'date':
+          aValue = new Date(a.date || a.expense_date || 0).getTime()
+          bValue = new Date(b.date || b.expense_date || 0).getTime()
+          break
+        case 'status':
+          aValue = (a.status || '').toLowerCase()
+          bValue = (b.status || '').toLowerCase()
+          break
+        case 'created_at':
+          aValue = new Date(a.created_at || 0).getTime()
+          bValue = new Date(b.created_at || 0).getTime()
+          break
+        default:
+          return 0
+      }
+      
+      if (aValue < bValue) {
+        return sortConfig.order === 'asc' ? -1 : 1
+      }
+      if (aValue > bValue) {
+        return sortConfig.order === 'asc' ? 1 : -1
+      }
+      return 0
+    })
+  }
   
   return result
 })
+
+// 切换排序
+const handleSort = (field) => {
+  if (sortConfig.field === field) {
+    // 如果点击的是同一列，切换排序方向
+    if (sortConfig.order === 'asc') {
+      sortConfig.order = 'desc'
+    } else if (sortConfig.order === 'desc') {
+      // 第三次点击取消排序
+      sortConfig.field = ''
+      sortConfig.order = ''
+    } else {
+      sortConfig.order = 'asc'
+    }
+  } else {
+    // 点击新列，默认升序
+    sortConfig.field = field
+    sortConfig.order = 'asc'
+  }
+}
+
+// 获取排序图标
+const getSortIcon = (field) => {
+  if (sortConfig.field !== field) {
+    return 'fas fa-sort text-gray-400'
+  }
+  if (sortConfig.order === 'asc') {
+    return 'fas fa-sort-up text-primary'
+  }
+  if (sortConfig.order === 'desc') {
+    return 'fas fa-sort-down text-primary'
+  }
+  return 'fas fa-sort text-gray-400'
+}
 
 // 全选/取消全选
 const isAllSelected = computed(() => {
@@ -631,7 +845,55 @@ const formatDate = (dateStr) => {
 // 格式化日期时间
 const formatDateTime = (dateStr) => {
   if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleString('zh-CN')
+  try {
+    const date = new Date(dateStr)
+    if (isNaN(date.getTime())) return dateStr
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    const hours = String(date.getHours()).padStart(2, '0')
+    const minutes = String(date.getMinutes()).padStart(2, '0')
+    const seconds = String(date.getSeconds()).padStart(2, '0')
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
+  } catch (error) {
+    return dateStr
+  }
+}
+
+// 获取审批节点状态文本颜色
+const getApprovalNodeTextColor = (status) => {
+  const colorMap = {
+    pending: 'text-yellow-300',
+    approving: 'text-blue-300',
+    approved: 'text-green-300',
+    rejected: 'text-red-300',
+    auto_approved: 'text-purple-300'
+  }
+  return colorMap[status] || 'text-gray-300'
+}
+
+// 获取审批节点状态样式
+const getApprovalNodeStatusClass = (status) => {
+  const statusMap = {
+    pending: 'bg-gradient-to-r from-yellow-400/80 to-orange-400/80',
+    approving: 'bg-gradient-to-r from-blue-500/80 to-cyan-500/80',
+    approved: 'bg-gradient-to-r from-emerald-500/80 to-green-500/80',
+    rejected: 'bg-gradient-to-r from-red-500/80 to-rose-500/80',
+    auto_approved: 'bg-gradient-to-r from-purple-500/80 to-indigo-500/80'
+  }
+  return statusMap[status] || 'bg-gradient-to-r from-gray-500/80 to-gray-600/80'
+}
+
+// 获取审批节点图标
+const getApprovalNodeIcon = (status) => {
+  const iconMap = {
+    pending: 'fas fa-clock',
+    approving: 'fas fa-spinner',
+    approved: 'fas fa-check',
+    rejected: 'fas fa-times',
+    auto_approved: 'fas fa-robot'
+  }
+  return iconMap[status] || 'fas fa-question'
 }
 
 // 获取状态文本
@@ -664,6 +926,7 @@ const handleView = async (item) => {
     // 先设置数据并显示模态框，避免闪烁
     viewingExpense.value = { ...item }
     showViewModal.value = true
+    approvalNodes.value = [] // 重置审批节点
     
     // 然后异步加载完整的费用申请详情（包含支付信息等完整字段）
     try {
@@ -685,6 +948,27 @@ const handleView = async (item) => {
       // 如果详情接口失败，使用列表数据（模态框仍然显示）
       viewingExpense.value = { ...item }
     }
+    
+    // 获取审批节点信息
+    try {
+      loadingApprovalNodes.value = true
+      console.log('开始获取审批节点信息，费用ID:', item.id)
+      const nodesResponse = await expenseApplicationsAPI.getExpenseApplicationApprovalNodes(item.id)
+      console.log('审批节点API响应:', nodesResponse)
+      
+      if (nodesResponse.success) {
+        approvalNodes.value = nodesResponse.data || []
+        console.log('审批节点数据:', approvalNodes.value)
+      } else {
+        console.warn('获取审批节点信息失败:', nodesResponse.message)
+        approvalNodes.value = []
+      }
+    } catch (nodesError) {
+      console.error('获取审批节点信息错误:', nodesError)
+      approvalNodes.value = []
+    } finally {
+      loadingApprovalNodes.value = false
+    }
   } catch (error) {
     console.error('查看费用详情错误:', error)
     ElMessage.error('加载费用详情失败，请稍后重试')
@@ -698,6 +982,8 @@ const handleView = async (item) => {
 const closeViewModal = () => {
   showViewModal.value = false
   viewingExpense.value = null
+  approvalNodes.value = []
+  loadingApprovalNodes.value = false
 }
 
 // 删除费用申请

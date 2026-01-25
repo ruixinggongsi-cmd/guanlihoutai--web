@@ -337,6 +337,7 @@ import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '../stores'
 import { changePassword } from '../api/auth'
+import approvalNotificationService from '@/utils/approvalNotification'
 
 const router = useRouter()
 const route = useRoute()
@@ -689,6 +690,69 @@ const submitChangePassword = async () => {
   }
 }
 
+// 启动审批通知服务
+const startApprovalNotification = async () => {
+  // 只在用户已登录时启动
+  if (!userStore.isLoggedIn) {
+    console.log('[审批通知] 用户未登录，不启动通知服务')
+    return
+  }
+
+  try {
+    console.log('[审批通知] 尝试启动通知服务...')
+    const started = await approvalNotificationService.start(10000) // 10秒检查一次（更频繁）
+    if (started) {
+      console.log('[审批通知] ✅ 通知服务已成功启动，将每10秒检查一次新订单')
+      // 启动后立即检查一次（确保登录时立即显示通知）
+      setTimeout(async () => {
+        await approvalNotificationService.checkImmediately()
+        const status = approvalNotificationService.getStatus()
+        console.log('[审批通知] 服务状态:', status)
+      }, 2000) // 延迟2秒后立即检查，确保用户信息已加载
+    } else {
+      console.warn('[审批通知] ⚠️ 通知服务启动失败，可能是未获得通知权限')
+      // 如果权限被拒绝，提示用户
+      if (Notification.permission === 'denied') {
+        console.warn('[审批通知] 通知权限已被拒绝，请在浏览器设置中允许通知')
+      }
+    }
+  } catch (error) {
+    console.error('[审批通知] ❌ 启动通知服务失败:', error)
+  }
+}
+
+// 停止审批通知服务
+const stopApprovalNotification = () => {
+  approvalNotificationService.stop()
+}
+
+// 监听用户登录状态变化
+watch(() => userStore.isLoggedIn, (isLoggedIn, wasLoggedIn) => {
+  if (isLoggedIn && !wasLoggedIn) {
+    // 用户刚登录（从未登录变为已登录），启动通知服务
+    console.log('[审批通知] 检测到用户登录，启动通知服务')
+    startApprovalNotification()
+  } else if (!isLoggedIn && wasLoggedIn) {
+    // 用户退出，停止通知服务
+    console.log('[审批通知] 检测到用户退出，停止通知服务')
+    stopApprovalNotification()
+  }
+}, { immediate: false }) // 不使用 immediate，避免重复启动
+
+// 组件挂载时，如果用户已登录，启动通知服务（用于页面刷新后恢复）
+onMounted(() => {
+  if (userStore.isLoggedIn) {
+    console.log('[审批通知] 页面加载时检测到用户已登录，启动通知服务')
+    startApprovalNotification()
+  } else {
+    console.log('[审批通知] 页面加载时用户未登录，不启动通知服务')
+  }
+})
+
+// 组件卸载时停止通知服务
+onUnmounted(() => {
+  stopApprovalNotification()
+})
 
 </script>
 

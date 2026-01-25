@@ -376,6 +376,79 @@
                 <div class="text-gray-300 leading-relaxed">{{ viewingExpenseDetail.description }}</div>
               </div>
             </div>
+            
+            <!-- 审批记录 -->
+            <div class="mt-8">
+              <div class="flex items-center mb-6">
+                <div class="w-8 h-8 bg-gradient-to-r from-success to-success-light rounded-lg flex items-center justify-center mr-3">
+                  <i class="fas fa-route text-white text-sm"></i>
+                </div>
+                <h3 class="text-xl font-semibold text-white">审批记录</h3>
+              </div>
+              
+              <div class="bg-white/5 rounded-xl p-6 border border-white/10 backdrop-blur-sm">
+                <div v-if="loadingApprovalNodes" class="flex items-center justify-center py-6">
+                  <i class="fas fa-spinner fa-spin text-2xl text-gray-400"></i>
+                </div>
+                <div v-else-if="approvalNodes.length > 0" class="space-y-1">
+                  <div v-for="(node, index) in approvalNodes" :key="index" 
+                       class="flex items-start justify-between py-4 border-b border-white/10 last:border-b-0 hover:bg-white/5 transition-all duration-200 px-3">
+                    <div class="flex items-start space-x-4 flex-1">
+                      <div class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" :class="getApprovalNodeStatusClass(node.status)">
+                        <i :class="getApprovalNodeIcon(node.status)" class="text-white text-sm"></i>
+                      </div>
+                      <div class="flex-1 min-w-0">
+                        <div class="flex items-center space-x-3 mb-1">
+                          <div class="text-white font-medium text-sm">{{ node.nodeName || node.node_name || '审批节点' }}</div>
+                          <div class="font-medium text-xs px-2 py-0.5 rounded" :class="getApprovalNodeTextColor(node.status)">
+                            <span v-if="node.status === 'pending'">待审批</span>
+                            <span v-else-if="node.status === 'approving'">审批中</span>
+                            <span v-else-if="node.status === 'approved'">已通过</span>
+                            <span v-else-if="node.status === 'rejected'">已拒绝</span>
+                            <span v-else-if="node.status === 'auto_approved'">自动审批</span>
+                            <span v-else-if="node.is_current_node">审批中……</span>
+                            <span v-else>待审批</span>
+                          </div>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-gray-400 mb-2">
+                          <div class="flex items-center space-x-1">
+                            <i class="fas fa-user text-gray-500"></i>
+                            <span class="font-medium text-gray-300">审批人：</span>
+                            <span class="text-white font-semibold">
+                              {{ 
+                                node.user_info?.name || 
+                                node.user_info?.username || 
+                                node.userName || 
+                                node.user_name || 
+                                node.approver_name || 
+                                (node.user_id ? `用户ID: ${node.user_id}` : '未指定') 
+                              }}
+                            </span>
+                          </div>
+                          <div class="flex items-center space-x-1">
+                            <i class="fas fa-clock text-gray-500"></i>
+                            <span class="font-medium text-gray-300">审批时间：</span>
+                            <span class="text-white">{{ formatDateTime(node.createdAt || node.create_time || node.createTime || node.approvedAt || node.approved_at || node.approval_start_time || node.approval_end_time || node.updatedAt || node.update_time || node.updateTime) }}</span>
+                          </div>
+                        </div>
+                        <div v-if="node.comment" class="mt-2 p-2 bg-white/5 rounded-lg border border-white/10">
+                          <div class="flex items-start space-x-2">
+                            <i class="fas fa-comment text-gray-400 text-xs mt-0.5"></i>
+                            <div class="text-gray-300 text-xs leading-relaxed flex-1">{{ node.comment }}</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div v-else class="text-gray-400 text-center py-6">
+                  <div class="w-12 h-12 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-2 border border-white/10">
+                    <i class="fas fa-clipboard-list text-xl"></i>
+                  </div>
+                  <p class="text-sm">暂无审批记录</p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -454,6 +527,8 @@ const statusListTotalPages = ref(0)
 // 费用详情模态框
 const showExpenseDetailModal = ref(false)
 const viewingExpenseDetail = ref(null)
+const approvalNodes = ref([]) // 审批节点数据
+const loadingApprovalNodes = ref(false) // 加载审批节点状态
 
 // 格式化金额
 const formatAmount = (amount) => {
@@ -752,6 +827,7 @@ const viewExpenseDetail = async (item) => {
     // 先显示基本信息
     viewingExpenseDetail.value = { ...item }
     showExpenseDetailModal.value = true
+    approvalNodes.value = [] // 重置审批节点
     
     // 尝试获取完整详情
     try {
@@ -766,6 +842,41 @@ const viewExpenseDetail = async (item) => {
       console.error('加载费用详情失败:', error)
       // 如果失败，使用列表数据
     }
+    
+    // 获取审批节点信息
+    try {
+      loadingApprovalNodes.value = true
+      console.log('开始获取审批节点信息，费用ID:', item.id)
+      const nodesResponse = await expenseApplicationsAPI.getExpenseApplicationApprovalNodes(item.id)
+      console.log('审批节点API响应:', nodesResponse)
+      
+      if (nodesResponse.success) {
+        approvalNodes.value = nodesResponse.data || []
+        console.log('审批节点数据:', approvalNodes.value)
+        
+        // 打印每个节点的详细信息
+        if (approvalNodes.value.length > 0) {
+          approvalNodes.value.forEach((node, index) => {
+            console.log(`审批节点 ${index + 1}:`, {
+              nodeName: node.nodeName || node.node_name,
+              status: node.status,
+              user_id: node.user_id,
+              user_info: node.user_info,
+              user_info_name: node.user_info?.name,
+              user_info_username: node.user_info?.username
+            })
+          })
+        }
+      } else {
+        console.warn('获取审批节点信息失败:', nodesResponse.message)
+        approvalNodes.value = []
+      }
+    } catch (nodesError) {
+      console.error('获取审批节点信息错误:', nodesError)
+      approvalNodes.value = []
+    } finally {
+      loadingApprovalNodes.value = false
+    }
   } catch (error) {
     console.error('查看费用详情错误:', error)
   }
@@ -775,6 +886,8 @@ const viewExpenseDetail = async (item) => {
 const closeExpenseDetailModal = () => {
   showExpenseDetailModal.value = false
   viewingExpenseDetail.value = null
+  approvalNodes.value = []
+  loadingApprovalNodes.value = false
 }
 
 // 获取状态文本
@@ -810,7 +923,55 @@ const formatDate = (dateStr) => {
 // 格式化日期时间
 const formatDateTime = (dateStr) => {
   if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleString('zh-CN')
+  try {
+    const date = new Date(dateStr)
+    if (isNaN(date.getTime())) return dateStr
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    const hours = String(date.getHours()).padStart(2, '0')
+    const minutes = String(date.getMinutes()).padStart(2, '0')
+    const seconds = String(date.getSeconds()).padStart(2, '0')
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
+  } catch (error) {
+    return dateStr
+  }
+}
+
+// 获取审批节点状态文本颜色
+const getApprovalNodeTextColor = (status) => {
+  const colorMap = {
+    pending: 'text-yellow-300',
+    approving: 'text-blue-300',
+    approved: 'text-green-300',
+    rejected: 'text-red-300',
+    auto_approved: 'text-purple-300'
+  }
+  return colorMap[status] || 'text-gray-300'
+}
+
+// 获取审批节点状态样式
+const getApprovalNodeStatusClass = (status) => {
+  const statusMap = {
+    pending: 'bg-gradient-to-r from-yellow-400/80 to-orange-400/80',
+    approving: 'bg-gradient-to-r from-blue-500/80 to-cyan-500/80',
+    approved: 'bg-gradient-to-r from-emerald-500/80 to-green-500/80',
+    rejected: 'bg-gradient-to-r from-red-500/80 to-rose-500/80',
+    auto_approved: 'bg-gradient-to-r from-purple-500/80 to-indigo-500/80'
+  }
+  return statusMap[status] || 'bg-gradient-to-r from-gray-500/80 to-gray-600/80'
+}
+
+// 获取审批节点图标
+const getApprovalNodeIcon = (status) => {
+  const iconMap = {
+    pending: 'fas fa-clock',
+    approving: 'fas fa-spinner',
+    approved: 'fas fa-check',
+    rejected: 'fas fa-times',
+    auto_approved: 'fas fa-robot'
+  }
+  return iconMap[status] || 'fas fa-question'
 }
 
 

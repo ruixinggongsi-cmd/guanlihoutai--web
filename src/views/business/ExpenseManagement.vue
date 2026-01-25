@@ -453,48 +453,71 @@
 
           <!-- 审批记录 -->
           <div class="mb-8">
-            <div class="flex items-center mb-4">
+            <div class="flex items-center mb-6">
               <div class="w-8 h-8 bg-gradient-to-r from-success to-success-light rounded-lg flex items-center justify-center mr-3">
                 <i class="fas fa-route text-white text-sm"></i>
               </div>
               <h3 class="text-xl font-semibold text-white">审批记录</h3>
             </div>
             
-            <div class="bg-white/5 rounded-xl p-4 border border-white/10 backdrop-blur-sm">
+            <div class="bg-white/5 rounded-xl p-6 border border-white/10 backdrop-blur-sm">
               <div v-if="mockApprovalNodes.length > 0" class="space-y-1">
                 <div v-for="(node, index) in mockApprovalNodes" :key="index" 
-                     class="flex items-center justify-between py-4 border-b border-white/10 last:border-b-0 hover:bg-white/5 transition-all duration-200 px-2">
-                  <div class="flex items-center space-x-4">
-                    <div class="w-8 h-8 rounded-full flex items-center justify-center" :class="getApprovalNodeStatusClass(node.status)">
-                      <i :class="getApprovalNodeIcon(node.status)" class="text-white text-xs"></i>
+                     class="flex items-start justify-between py-4 border-b border-white/10 last:border-b-0 hover:bg-white/5 transition-all duration-200 px-3">
+                  <div class="flex items-start space-x-4 flex-1">
+                    <div class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" :class="getApprovalNodeStatusClass(node.status)">
+                      <i :class="getApprovalNodeIcon(node.status)" class="text-white text-sm"></i>
                     </div>
-                    <div>
-                    <div class="text-white font-medium text-sm">{{ node.nodeName || node.node_name }}-{{node.user_info?.name || ''}}</div>
-                    </div>
-                  </div>
-                  <div class="text-right">
-                    <div class="font-medium text-sm" :class="getApprovalNodeTextColor(node.status)" v-if="!node.is_current_node">
-                      <span v-if="node.status === 'pending'">待审批</span>
-                      <span v-else-if="node.status === 'approving'">审批中</span>
-                      <span v-else-if="node.status === 'approved'">已通过</span>
-                      <span v-else-if="node.status === 'rejected'">已拒绝</span>
-                      <span v-else-if="node.status === 'auto_approved'">自动审批</span>
-                      <span v-else>待审批</span>
-                    </div>
-                     <div class="font-medium text-sm" :class="getApprovalNodeTextColor(node.status)" v-else>
-                      <span >审批中……</span>
-                    </div>
-                    <div class="text-gray-400 text-xs">{{ formatDate(node.createTime) }}</div>
-                    <div v-if="node.comment" class="text-gray-300 text-xs mt-1 italic max-w-xs">{{ node.comment }}</div>
-                    <!-- 审批节点附件显示 -->
-                    <div v-if="getAttachments(node).length > 0" class="mt-2">
-                      <div class="flex flex-wrap gap-2">
-                        <div v-for="(attachment, attIndex) in getAttachments(node)" :key="attIndex" 
-                             class="flex items-center space-x-2 bg-white/10 hover:bg-white/20 rounded-lg px-3 py-2 border border-white/20 transition-all duration-200 cursor-pointer"
-                             @click="downloadAttachment(attachment)">
-                          <i class="fas fa-paperclip text-gray-300 text-xs"></i>
-                          <span class="text-gray-200 text-xs truncate max-w-32">{{ attachment.name }}</span>
-                          <span class="text-gray-400 text-xs">({{ formatFileSize(attachment.size) }})</span>
+                    <div class="flex-1 min-w-0">
+                      <div class="flex items-center space-x-3 mb-1">
+                        <div class="text-white font-medium text-sm">{{ node.nodeName || node.node_name || '审批节点' }}</div>
+                        <div class="font-medium text-xs px-2 py-0.5 rounded" :class="getApprovalNodeTextColor(node.status)">
+                          <span v-if="node.status === 'pending'">待审批</span>
+                          <span v-else-if="node.status === 'approving'">审批中</span>
+                          <span v-else-if="node.status === 'approved'">已通过</span>
+                          <span v-else-if="node.status === 'rejected'">已拒绝</span>
+                          <span v-else-if="node.status === 'auto_approved'">自动审批</span>
+                          <span v-else-if="node.is_current_node">审批中……</span>
+                          <span v-else>待审批</span>
+                        </div>
+                      </div>
+                      <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-gray-400 mb-2">
+                        <div class="flex items-center space-x-1">
+                          <i class="fas fa-user text-gray-500"></i>
+                          <span class="font-medium text-gray-300">审批人：</span>
+                          <span class="text-white font-semibold">
+                            {{ 
+                              node.user_info?.name || 
+                              node.user_info?.username || 
+                              node.userName || 
+                              node.user_name || 
+                              node.approver_name || 
+                              (node.user_id ? `用户ID: ${node.user_id}` : '未指定') 
+                            }}
+                          </span>
+                        </div>
+                        <div class="flex items-center space-x-1">
+                          <i class="fas fa-clock text-gray-500"></i>
+                          <span class="font-medium text-gray-300">审批时间：</span>
+                          <span class="text-white">{{ formatDateTime(node.createdAt || node.create_time || node.createTime || node.approvedAt || node.approved_at || node.approval_start_time || node.approval_end_time || node.updatedAt || node.update_time || node.updateTime) }}</span>
+                        </div>
+                      </div>
+                      <div v-if="node.comment" class="mt-2 p-2 bg-white/5 rounded-lg border border-white/10">
+                        <div class="flex items-start space-x-2">
+                          <i class="fas fa-comment text-gray-400 text-xs mt-0.5"></i>
+                          <div class="text-gray-300 text-xs leading-relaxed flex-1">{{ node.comment }}</div>
+                        </div>
+                      </div>
+                      <!-- 审批节点附件显示 -->
+                      <div v-if="getAttachments(node).length > 0" class="mt-2">
+                        <div class="flex flex-wrap gap-2">
+                          <div v-for="(attachment, attIndex) in getAttachments(node)" :key="attIndex" 
+                               class="flex items-center space-x-2 bg-white/10 hover:bg-white/20 rounded-lg px-3 py-1.5 border border-white/20 transition-all duration-200 cursor-pointer"
+                               @click="downloadAttachment(attachment)">
+                            <i class="fas fa-paperclip text-gray-300 text-xs"></i>
+                            <span class="text-gray-200 text-xs truncate max-w-32">{{ attachment.name }}</span>
+                            <span class="text-gray-400 text-xs">({{ formatFileSize(attachment.size) }})</span>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -506,6 +529,7 @@
                   <i class="fas fa-clipboard-list text-xl"></i>
                 </div>
                 <p class="text-sm">暂无审批记录</p>
+                <p class="text-xs text-gray-500 mt-2">如果应该有审批记录，请检查后端API是否正确返回数据</p>
               </div>
             </div>
           </div>
@@ -1110,6 +1134,23 @@ const formatDate = (date) => {
   return new Date(date).toLocaleDateString('zh-CN')
 }
 
+const formatDateTime = (dateStr) => {
+  if (!dateStr) return '-'
+  try {
+    const date = new Date(dateStr)
+    if (isNaN(date.getTime())) return dateStr
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    const hours = String(date.getHours()).padStart(2, '0')
+    const minutes = String(date.getMinutes()).padStart(2, '0')
+    const seconds = String(date.getSeconds()).padStart(2, '0')
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
+  } catch (error) {
+    return dateStr
+  }
+}
+
 // 获取审批节点附件 - 参考ExpenseApproval.vue的实现
 const getAttachments = (node) => {
  
@@ -1371,15 +1412,41 @@ const viewExpense = async (expense) => {
     
     // 仅获取审批节点信息（点击查看时获取）
     try {
+      console.log('开始获取审批节点信息，费用ID:', expense.id)
       const nodesResponse = await expenseApplicationsAPI.getExpenseApplicationApprovalNodes(expense.id)
+      console.log('审批节点API响应:', nodesResponse)
+      
       if (nodesResponse.success) {
         mockApprovalNodes.value = nodesResponse.data || []
+        console.log('审批节点数据:', mockApprovalNodes.value)
+        console.log('审批节点数量:', mockApprovalNodes.value.length)
+        
+        // 打印每个节点的详细信息
+        if (mockApprovalNodes.value.length > 0) {
+          mockApprovalNodes.value.forEach((node, index) => {
+            console.log(`审批节点 ${index + 1}:`, {
+              nodeName: node.nodeName || node.node_name,
+              status: node.status,
+              user_id: node.user_id,
+              user_info: node.user_info,
+              user_info_name: node.user_info?.name,
+              user_info_username: node.user_info?.username,
+              userName: node.userName || node.user_name,
+              createdAt: node.createdAt || node.create_time,
+              comment: node.comment,
+              fullNode: node // 打印完整节点数据以便调试
+            })
+          })
+        } else {
+          console.warn('审批节点数据为空')
+        }
       } else {
         console.warn('获取审批节点信息失败:', nodesResponse.message)
         mockApprovalNodes.value = []
       }
     } catch (nodesError) {
       console.error('获取审批节点信息错误:', nodesError)
+      console.error('错误详情:', nodesError.response?.data || nodesError.message)
       mockApprovalNodes.value = []
     }
   } catch (error) {

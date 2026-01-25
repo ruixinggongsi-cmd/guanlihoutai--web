@@ -28,7 +28,15 @@
               </div>
             </div>
             <div class="flex space-x-3">
-              <!-- 预留操作按钮区域 -->
+              <!-- 通知状态和测试按钮 -->
+              <button
+                @click="testNotification"
+                class="px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-xl text-sm font-medium transition-all duration-300 flex items-center space-x-2"
+                title="测试通知功能"
+              >
+                <i class="fas fa-bell"></i>
+                <span>测试通知</span>
+              </button>
             </div>
           </div>
         </div>
@@ -693,39 +701,61 @@
             <div class="bg-white/5 rounded-xl p-6 border border-white/10 backdrop-blur-sm">
               <div v-if="mockApprovalNodes.length > 0" class="space-y-1">
                 <div v-for="(node, index) in mockApprovalNodes" :key="index" 
-                     class="flex items-center justify-between py-4 border-b border-white/10 last:border-b-0 hover:bg-white/5 transition-all duration-200 px-3">
-                  <div class="flex items-center space-x-4">
-                    <div class="w-8 h-8 rounded-full flex items-center justify-center" :class="getApprovalNodeStatusClass(node.status)">
-                      <i :class="getApprovalNodeIcon(node.status)" class="text-white text-xs"></i>
+                     class="flex items-start justify-between py-4 border-b border-white/10 last:border-b-0 hover:bg-white/5 transition-all duration-200 px-3">
+                  <div class="flex items-start space-x-4 flex-1">
+                    <div class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" :class="getApprovalNodeStatusClass(node.status)">
+                      <i :class="getApprovalNodeIcon(node.status)" class="text-white text-sm"></i>
                     </div>
-                    <div>
-                      <div class="text-white font-medium text-sm">{{ node.nodeName || node.node_name }}</div>
-                      <div class="text-gray-400 text-xs">{{ node.user_info?.name || '' }}</div>
-                    </div>
-                  </div>
-                  <div class="text-right">
-                    <div class="font-medium text-sm" :class="getApprovalNodeTextColor(node.status)" v-if="!node.is_current_node">
-                      <span v-if="node.status === 'pending'">待审批</span>
-                      <span v-else-if="node.status === 'approving'">审批中</span>
-                      <span v-else-if="node.status === 'approved'">已通过</span>
-                      <span v-else-if="node.status === 'rejected'">已拒绝</span>
-                      <span v-else-if="node.status === 'auto_approved'">自动审批</span>
-                      <span v-else>待审批</span>
-                    </div>
-                     <div class="font-medium text-sm" :class="getApprovalNodeTextColor(node.status)" v-else>
-                      <span>审批中……</span>
-                    </div>
-                    <div class="text-gray-400 text-xs">{{ formatDateTime(node.createdAt) }}</div>
-                    <div v-if="node.comment" class="text-gray-300 text-xs mt-1 italic max-w-xs">{{ node.comment }}</div>
-                    <!-- 审批节点附件显示 -->
-                    <div v-if="getAttachments(node).length > 0" class="mt-2">
-                      <div class="flex flex-wrap gap-2 justify-end">
-                        <div v-for="(attachment, index) in getAttachments(node)" :key="index" 
-                             class="flex items-center space-x-2 bg-white/10 hover:bg-white/20 rounded-lg px-3 py-2 border border-white/20 transition-all duration-200 cursor-pointer"
-                             @click="downloadAttachment(attachment)">
-                          <i class="fas fa-paperclip text-gray-300 text-xs"></i>
-                          <span class="text-gray-200 text-xs truncate max-w-32">{{ attachment.name }}</span>
-                          <span class="text-gray-400 text-xs">({{ formatFileSize(attachment.size) }})</span>
+                    <div class="flex-1 min-w-0">
+                      <div class="flex items-center space-x-3 mb-1">
+                        <div class="text-white font-medium text-sm">{{ node.nodeName || node.node_name || '审批节点' }}</div>
+                        <div class="font-medium text-xs px-2 py-0.5 rounded" :class="getApprovalNodeTextColor(node.status)">
+                          <span v-if="node.status === 'pending'">待审批</span>
+                          <span v-else-if="node.status === 'approving'">审批中</span>
+                          <span v-else-if="node.status === 'approved'">已通过</span>
+                          <span v-else-if="node.status === 'rejected'">已拒绝</span>
+                          <span v-else-if="node.status === 'auto_approved'">自动审批</span>
+                          <span v-else-if="node.is_current_node">审批中……</span>
+                          <span v-else>待审批</span>
+                        </div>
+                      </div>
+                      <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-gray-400 mb-2">
+                        <div class="flex items-center space-x-1">
+                          <i class="fas fa-user text-gray-500"></i>
+                          <span class="font-medium text-gray-300">审批人：</span>
+                          <span class="text-white font-semibold">
+                            {{ 
+                              node.user_info?.name || 
+                              node.user_info?.username || 
+                              node.userName || 
+                              node.user_name || 
+                              node.approver_name || 
+                              (node.user_id ? `用户ID: ${node.user_id}` : '未指定') 
+                            }}
+                          </span>
+                        </div>
+                        <div class="flex items-center space-x-1">
+                          <i class="fas fa-clock text-gray-500"></i>
+                          <span class="font-medium text-gray-300">审批时间：</span>
+                          <span class="text-white">{{ formatDateTime(node.createdAt || node.create_time || node.createTime || node.approvedAt || node.approved_at || node.approval_start_time || node.approval_end_time || node.updatedAt || node.update_time || node.updateTime) }}</span>
+                        </div>
+                      </div>
+                      <div v-if="node.comment" class="mt-2 p-2 bg-white/5 rounded-lg border border-white/10">
+                        <div class="flex items-start space-x-2">
+                          <i class="fas fa-comment text-gray-400 text-xs mt-0.5"></i>
+                          <div class="text-gray-300 text-xs leading-relaxed flex-1">{{ node.comment }}</div>
+                        </div>
+                      </div>
+                      <!-- 审批节点附件显示 -->
+                      <div v-if="getAttachments(node).length > 0" class="mt-2">
+                        <div class="flex flex-wrap gap-2">
+                          <div v-for="(attachment, index) in getAttachments(node)" :key="index" 
+                               class="flex items-center space-x-2 bg-white/10 hover:bg-white/20 rounded-lg px-3 py-1.5 border border-white/20 transition-all duration-200 cursor-pointer"
+                               @click="downloadAttachment(attachment)">
+                            <i class="fas fa-paperclip text-gray-300 text-xs"></i>
+                            <span class="text-gray-200 text-xs truncate max-w-32">{{ attachment.name }}</span>
+                            <span class="text-gray-400 text-xs">({{ formatFileSize(attachment.size) }})</span>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -783,6 +813,7 @@ import { ElMessage } from 'element-plus'
 import { expenseApplicationsAPI } from '@/api/expenseApplications'
 import { expenseCategoryAPI } from '@/api/expenseCategory'
 import request from '@/utils/request'
+import approvalNotificationService from '@/utils/approvalNotification'
 
 // 响应式数据
 const searchKeyword = ref('')
@@ -1049,9 +1080,37 @@ const nextPage = () => {
 const viewApproval = async (approval) => {
   try {
     // 获取审批节点信息
+    console.log('开始获取审批节点信息，费用ID:', approval.id)
     const nodesResponse = await expenseApplicationsAPI.getExpenseApplicationApprovalNodes(approval.id)
+    console.log('审批节点API响应:', nodesResponse)
+    
     if (nodesResponse.success && nodesResponse.data) {
       mockApprovalNodes.value = nodesResponse.data
+      console.log('审批节点数据:', mockApprovalNodes.value)
+      console.log('审批节点数量:', mockApprovalNodes.value.length)
+      
+      // 打印每个节点的详细信息
+      if (mockApprovalNodes.value.length > 0) {
+        mockApprovalNodes.value.forEach((node, index) => {
+          console.log(`审批节点 ${index + 1}:`, {
+            nodeName: node.nodeName || node.node_name,
+            status: node.status,
+            user_id: node.user_id,
+            user_info: node.user_info,
+            user_info_name: node.user_info?.name,
+            user_info_username: node.user_info?.username,
+            userName: node.userName || node.user_name,
+            createdAt: node.createdAt || node.create_time,
+            comment: node.comment,
+            fullNode: node // 打印完整节点数据以便调试
+          })
+        })
+      } else {
+        console.warn('审批节点数据为空')
+      }
+    } else {
+      console.warn('获取审批节点信息失败:', nodesResponse.message)
+      mockApprovalNodes.value = []
     }
     
     // 获取完整的费用申请详情（包含支付信息等完整字段）
@@ -1523,9 +1582,57 @@ const getAttachments = (node) => {
   return []
 }
 
+// 测试通知功能
+const testNotification = async () => {
+  try {
+    // 先请求权限
+    if (Notification.permission !== 'granted') {
+      const permission = await Notification.requestPermission()
+      if (permission !== 'granted') {
+        ElMessage.warning('需要允许通知权限才能使用通知功能')
+        return
+      }
+    }
+
+    // 显示测试通知
+    approvalNotificationService.showNotification(
+      '测试通知',
+      {
+        body: '如果您看到这条消息，说明通知功能正常工作！',
+        icon: '/vite.svg',
+        onclick: () => {
+          console.log('通知被点击')
+        }
+      }
+    )
+    
+    ElMessage.success('测试通知已发送，请查看桌面通知')
+  } catch (error) {
+    console.error('测试通知失败:', error)
+    ElMessage.error('测试通知失败: ' + error.message)
+  }
+}
+
 // 生命周期
 onMounted(() => {
   loadData()
+  
+  // 检查通知服务状态
+  setTimeout(() => {
+    const status = approvalNotificationService.getStatus()
+    console.log('[费用审批页面] 通知服务状态:', status)
+    
+    if (!status.isEnabled) {
+      console.warn('[费用审批页面] 通知服务未启动，可能的原因：')
+      console.warn('  1. 用户未登录')
+      console.warn('  2. 未获得通知权限')
+      console.warn('  3. 服务启动失败')
+      ElMessage.warning('通知服务未启动，请检查浏览器通知权限设置')
+    } else {
+      console.log('[费用审批页面] ✅ 通知服务正在运行')
+      console.log(`[费用审批页面] 当前待审批数量: ${status.lastPendingCount}`)
+    }
+  }, 2000)
 })
 </script>
 
