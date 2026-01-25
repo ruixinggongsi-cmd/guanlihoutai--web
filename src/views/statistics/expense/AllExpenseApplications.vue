@@ -199,7 +199,7 @@
               </td>
               <td class="px-4 py-3">
                 <span :class="getStatusClass(item.status)">
-                  {{ getStatusText(item.status) }}
+                  {{ getStatusText(item.status, item) }}
                 </span>
               </td>
               <td class="px-4 py-3 text-gray-400 text-sm">
@@ -351,7 +351,7 @@
                     </label>
                     <div class="max-w-xs text-right">
                       <span :class="viewingExpense ? getStatusClass(viewingExpense.status) : ''" class="inline-flex items-center gap-2 px-3 py-1 rounded-lg text-sm font-medium">
-                        {{ viewingExpense ? getStatusText(viewingExpense.status) : '-' }}
+                        {{ viewingExpense ? getStatusText(viewingExpense.status, viewingExpense) : '-' }}
                       </span>
                     </div>
                   </div>
@@ -498,7 +498,10 @@
                             <span v-if="node.status === 'pending'">待审批</span>
                             <span v-else-if="node.status === 'approving'">审批中</span>
                             <span v-else-if="node.status === 'approved'">已通过</span>
-                            <span v-else-if="node.status === 'rejected'">已拒绝</span>
+                            <span v-else-if="node.status === 'rejected'">
+                              <span v-if="isTimeoutRejection(node)">审核超时</span>
+                              <span v-else>已拒绝</span>
+                            </span>
                             <span v-else-if="node.status === 'auto_approved'">自动审批</span>
                             <span v-else-if="node.is_current_node">审批中……</span>
                             <span v-else>待审批</span>
@@ -525,10 +528,13 @@
                             <span class="text-white">{{ formatDateTime(node.createdAt || node.create_time || node.createTime || node.approvedAt || node.approved_at || node.approval_start_time || node.approval_end_time || node.updatedAt || node.update_time || node.updateTime) }}</span>
                           </div>
                         </div>
-                        <div v-if="node.comment" class="mt-2 p-2 bg-white/5 rounded-lg border border-white/10">
+                        <div v-if="node.comment" class="mt-2 p-2 rounded-lg border" :class="isTimeoutRejection(node) ? 'bg-red-500/20 border-red-400/30' : 'bg-white/5 border-white/10'">
                           <div class="flex items-start space-x-2">
-                            <i class="fas fa-comment text-gray-400 text-xs mt-0.5"></i>
-                            <div class="text-gray-300 text-xs leading-relaxed flex-1">{{ node.comment }}</div>
+                            <i :class="isTimeoutRejection(node) ? 'fas fa-exclamation-triangle text-red-400' : 'fas fa-comment text-gray-400'" class="text-xs mt-0.5"></i>
+                            <div :class="isTimeoutRejection(node) ? 'text-red-300 font-semibold' : 'text-gray-300'" class="text-xs leading-relaxed flex-1">
+                              {{ node.comment }}
+                              <span v-if="isTimeoutRejection(node)" class="ml-2 text-red-400">⏰</span>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -896,8 +902,20 @@ const getApprovalNodeIcon = (status) => {
   return iconMap[status] || 'fas fa-question'
 }
 
+// 判断是否是超时拒绝
+const isTimeoutRejection = (node) => {
+  if (node.status !== 'rejected') return false
+  const comment = node.comment || ''
+  return comment.includes('审核超时') || comment.includes('超时')
+}
+
 // 获取状态文本
-const getStatusText = (status) => {
+const getStatusText = (status, item = null) => {
+  // 如果是拒绝状态，检查是否是超时拒绝
+  if (status === 'rejected' && item && item.is_timeout_rejection) {
+    return '审核超时'
+  }
+  
   const statusMap = {
     pending: '待审批',
     approving: '审批中',

@@ -139,6 +139,13 @@ export const expenseApplicationsAPI = {
    */
   getMyApprovals(params = {}) {
     return request.get('/expense-applications/my-approvals', params)
+  },
+
+  /**
+   * 手动触发超时检查（检查并处理超过48小时未完成的审批）
+   */
+  checkTimeout() {
+    return request.post('/expense-applications/check-timeout')
   }
 }
 
