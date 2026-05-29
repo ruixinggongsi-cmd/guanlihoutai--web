@@ -29,6 +29,17 @@
         </div>
         </div>
 
+        <p
+          v-if="startDate && endDate"
+          class="text-xs text-gray-400 flex flex-wrap items-center gap-2"
+        >
+          <i class="fas fa-calendar-alt text-info"></i>
+          <span>统计区间：<strong class="text-gray-200">{{ startDate }}</strong> 至 <strong class="text-gray-200">{{ endDate }}</strong>（按费用申请日期）</span>
+          <span v-if="statsMeta.matchedApplications != null" class="text-gray-500">
+            · 已匹配 {{ statsMeta.matchedApplications }} / {{ statsMeta.totalApplications }} 笔
+          </span>
+        </p>
+
         <!-- 查看维度 -->
         <div class="flex flex-wrap items-center gap-3">
           <div class="flex space-x-1 bg-white/5 rounded-xl p-1">
@@ -300,6 +311,7 @@ const recordsPage = ref(1)
 const recordsPageSize = ref(20)
 const recordsList = ref([])
 const recordsTotal = ref(0)
+const statsMeta = ref({})
 
 const recordsTotalPages = computed(() =>
   Math.max(1, Math.ceil(recordsTotal.value / recordsPageSize.value))
@@ -812,6 +824,7 @@ const loadData = async () => {
 
       const data = res.data || {}
       chartData.value = data
+      statsMeta.value = res.meta || {}
 
       const primaryItems =
         data.items || (viewMode.value === 'role' ? data.role : data.department) || []

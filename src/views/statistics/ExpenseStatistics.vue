@@ -670,11 +670,10 @@ onMounted(async () => {
   
   await getMainCategories()
   
-  // 设置默认日期（最近一个月）
+  // 默认日期：本月 1 号 至 今天（与「本月」快捷按钮一致，避免只查滚动 30 天导致历史数据看不到）
   const endDate = new Date()
-  const startDate = new Date()
-  startDate.setMonth(startDate.getMonth() - 1)
-  
+  const startDate = new Date(endDate.getFullYear(), endDate.getMonth(), 1)
+
   queryForm.endDate = endDate.toISOString().split('T')[0]
   queryForm.startDate = startDate.toISOString().split('T')[0]
   

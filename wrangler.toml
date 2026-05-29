@@ -1,5 +1,5 @@
 # Cloudflare 部署（Workers 静态资源 / Pages 均可）
-name = "guanlihoutai-web"
+name = "guanlihoutai--web"
 compatibility_date = "2024-08-01"
 
 # Workers 部署：构建后把 dist 作为静态站点发布（SPA 路由）
