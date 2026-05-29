@@ -23,7 +23,7 @@
 
     <div v-else>
       <!-- 筛选条件 -->
-      <div class="mb-6 grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div class="mb-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <div>
           <label class="block text-sm font-semibold text-gray-300 mb-2">
             <i class="fas fa-filter mr-2"></i>状态筛选
@@ -39,6 +39,26 @@
             <option value="approved" class="bg-slate-800">已通过</option>
             <option value="rejected" class="bg-slate-800">已拒绝</option>
             <option value="cancelled" class="bg-slate-800">已取消</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-300 mb-2">
+            <i class="fas fa-sitemap mr-2"></i>部门选择
+          </label>
+          <select
+            v-model="filters.departmentId"
+            @change="handleSearch"
+            class="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-primary"
+          >
+            <option value="" class="bg-slate-800">全部部门</option>
+            <option
+              v-for="opt in flatDepartmentOptions"
+              :key="opt.id"
+              :value="opt.id"
+              class="bg-slate-800"
+            >
+              {{ opt.label }}
+            </option>
           </select>
         </div>
         <div>
@@ -189,7 +209,7 @@
                 {{ item.applicant_info?.name || item.applicant_name || '未知' }}
               </td>
               <td class="px-4 py-3 text-gray-400">
-                {{ item.applicant_info?.department || '-' }}
+                {{ item.department_name || item.applicant_info?.department_name || '-' }}
               </td>
               <td class="px-4 py-3 text-white font-semibold">
                 ¥{{ formatAmount(item.amount) }}
@@ -382,7 +402,7 @@
                       部门
                     </label>
                     <div class="text-gray-300 font-medium max-w-xs text-right">
-                      {{ viewingExpense?.applicant_info?.department || '-' }}
+                      {{ viewingExpense?.department_name || viewingExpense?.applicant_info?.department_name || '-' }}
                     </div>
                   </div>
                   
@@ -560,6 +580,7 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted, Teleport } from 'vue'
 import { expenseApplicationsAPI } from '@/api/expenseApplications'
+import { getDepartmentTree } from '@/api/department'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const props = defineProps({
@@ -592,9 +613,36 @@ const pagination = reactive({
 
 const filters = reactive({
   status: 'all',
+  departmentId: '',
   applicantName: '',
   keyword: ''
 })
+
+const flatDepartmentOptions = ref([])
+
+const flattenDepartmentTree = (nodes, depth = 0) => {
+  const result = []
+  ;(nodes || []).forEach((node) => {
+    const name = node.department_name || node.name || '未命名'
+    const prefix = depth > 0 ? `${'　'.repeat(depth)}└ ` : ''
+    result.push({ id: node.id, name, label: `${prefix}${name}`, depth })
+    if (node.children?.length) {
+      result.push(...flattenDepartmentTree(node.children, depth + 1))
+    }
+  })
+  return result
+}
+
+const loadDepartmentTree = async () => {
+  try {
+    const res = await getDepartmentTree()
+    if (res.success) {
+      flatDepartmentOptions.value = flattenDepartmentTree(res.data || [])
+    }
+  } catch (e) {
+    console.error('[所有申请记录] 加载部门树失败:', e)
+  }
+}
 
 // 排序相关
 const sortConfig = reactive({
@@ -631,7 +679,8 @@ const loadData = async () => {
       end_date: endDate,
       keyword: filters.keyword || undefined,
       status: filters.status !== 'all' ? filters.status : undefined,
-      applicant_name: filters.applicantName || undefined  // 添加申请人姓名/用户名筛选参数
+      applicant_name: filters.applicantName || undefined,
+      departmentId: filters.departmentId || undefined
     }
 
     console.log('[所有申请记录] 开始加载数据，参数:', params)
@@ -684,8 +733,8 @@ const filteredApplications = computed(() => {
           bValue = ((b.applicant_info?.name || b.applicant_name || '') || '').toLowerCase()
           break
         case 'department':
-          aValue = ((a.applicant_info?.department || '') || '').toLowerCase()
-          bValue = ((b.applicant_info?.department || '') || '').toLowerCase()
+          aValue = ((a.department_name || a.applicant_info?.department_name || '') || '').toLowerCase()
+          bValue = ((b.department_name || b.applicant_info?.department_name || '') || '').toLowerCase()
           break
         case 'amount':
           aValue = parseFloat(a.amount || 0)
@@ -1041,7 +1090,7 @@ watch([() => props.startDate, () => props.endDate], () => {
 }, { immediate: true })
 
 onMounted(() => {
-  loadData()
+  loadDepartmentTree()
 })
 </script>
 
