@@ -29,16 +29,58 @@
         </div>
         </div>
 
-        <p
-          v-if="startDate && endDate"
-          class="text-xs text-gray-400 flex flex-wrap items-center gap-2"
-        >
-          <i class="fas fa-calendar-alt text-info"></i>
-          <span>统计区间：<strong class="text-gray-200">{{ startDate }}</strong> 至 <strong class="text-gray-200">{{ endDate }}</strong>（按费用申请日期）</span>
-          <span v-if="statsMeta.matchedApplications != null" class="text-gray-500">
-            · 已匹配 {{ statsMeta.matchedApplications }} / {{ statsMeta.totalApplications }} 笔
-          </span>
-        </p>
+        <!-- 统计时间（可自选区间） -->
+        <div class="rounded-xl border border-white/15 bg-white/5 p-4 space-y-3">
+          <div class="flex flex-wrap items-end gap-3">
+            <div class="space-y-1.5">
+              <label class="text-xs text-gray-400 flex items-center">
+                <i class="fas fa-calendar-alt mr-1.5 text-primary"></i>开始日期
+              </label>
+              <input
+                v-model="localStartDate"
+                type="date"
+                class="px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary min-w-[150px]"
+              />
+            </div>
+            <div class="space-y-1.5">
+              <label class="text-xs text-gray-400 flex items-center">
+                <i class="fas fa-calendar-check mr-1.5 text-secondary"></i>结束日期
+              </label>
+              <input
+                v-model="localEndDate"
+                type="date"
+                class="px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-secondary min-w-[150px]"
+              />
+            </div>
+            <button
+              type="button"
+              @click="applyDateFilter"
+              :disabled="loading"
+              class="px-5 py-2 bg-gradient-to-r from-primary to-secondary text-white rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50"
+            >
+              <i class="fas fa-search mr-1.5"></i>查询
+            </button>
+            <div class="flex flex-wrap gap-1.5 pb-0.5">
+              <button
+                v-for="preset in datePresets"
+                :key="preset.value"
+                type="button"
+                @click="setQuickDate(preset.value)"
+                class="px-2.5 py-1.5 rounded-lg text-xs bg-white/5 text-gray-300 border border-white/10 hover:bg-white/15 hover:text-white transition-colors"
+              >
+                {{ preset.label }}
+              </button>
+            </div>
+          </div>
+          <p class="text-xs text-gray-400 flex flex-wrap items-center gap-2">
+            <span v-if="localStartDate && localEndDate">
+              当前统计：<strong class="text-gray-200">{{ localStartDate }}</strong> 至 <strong class="text-gray-200">{{ localEndDate }}</strong>（按费用申请日期）
+            </span>
+            <span v-if="statsMeta.matchedApplications != null" class="text-gray-500">
+              · 已匹配 {{ statsMeta.matchedApplications }} / {{ statsMeta.totalApplications }} 笔
+            </span>
+          </p>
+        </div>
 
         <!-- 查看维度 -->
         <div class="flex flex-wrap items-center gap-3">
@@ -287,6 +329,15 @@ import { getExpenseOverview } from '@/api/expenseStatistics'
 import { getDepartmentTree } from '@/api/department'
 import { ElMessage } from 'element-plus'
 
+const props = defineProps({
+  startDate: { type: String, default: '' },
+  endDate: { type: String, default: '' },
+  userName: { type: String, default: '' },
+  mainCategory: { type: String, default: '' }
+})
+
+const emit = defineEmits(['error', 'loading', 'update:startDate', 'update:endDate'])
+
 const viewModeTabs = [
   { label: '部门', value: 'department', icon: 'fas fa-building' },
   { label: '角色', value: 'role', icon: 'fas fa-user-tag' },
@@ -312,6 +363,72 @@ const recordsPageSize = ref(20)
 const recordsList = ref([])
 const recordsTotal = ref(0)
 const statsMeta = ref({})
+const localStartDate = ref('')
+const localEndDate = ref('')
+
+const datePresets = [
+  { label: '本月', value: 'month' },
+  { label: '上月', value: 'lastMonth' },
+  { label: '近3个月', value: 'last3Months' },
+  { label: '今年', value: 'year' },
+  { label: '去年', value: 'lastYear' }
+]
+
+const toDateStr = (date) => {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+const setQuickDate = (type) => {
+  const today = new Date()
+  const start = new Date()
+  const end = new Date()
+
+  switch (type) {
+    case 'month':
+      start.setDate(1)
+      break
+    case 'lastMonth':
+      start.setMonth(today.getMonth() - 1, 1)
+      end.setMonth(today.getMonth(), 0)
+      break
+    case 'last3Months':
+      start.setMonth(today.getMonth() - 3)
+      start.setDate(start.getDate())
+      break
+    case 'year':
+      start.setMonth(0, 1)
+      end.setMonth(11, 31)
+      break
+    case 'lastYear':
+      start.setFullYear(today.getFullYear() - 1, 0, 1)
+      end.setFullYear(today.getFullYear() - 1, 11, 31)
+      break
+    default:
+      break
+  }
+
+  localStartDate.value = toDateStr(start)
+  localEndDate.value = toDateStr(end)
+  applyDateFilter()
+}
+
+const applyDateFilter = () => {
+  if (!localStartDate.value || !localEndDate.value) {
+    ElMessage.warning('请选择开始日期和结束日期')
+    return
+  }
+  if (localStartDate.value > localEndDate.value) {
+    ElMessage.warning('开始日期不能晚于结束日期')
+    return
+  }
+  emit('update:startDate', localStartDate.value)
+  emit('update:endDate', localEndDate.value)
+  recordsPage.value = 1
+  loadData()
+}
 
 const recordsTotalPages = computed(() =>
   Math.max(1, Math.ceil(recordsTotal.value / recordsPageSize.value))
@@ -392,27 +509,6 @@ const switchViewMode = (mode) => {
   recordsPage.value = 1
   loadData()
 }
-
-const props = defineProps({
-  startDate: {
-    type: String,
-    default: ''
-  },
-  endDate: {
-    type: String,
-    default: ''
-  },
-  userName: {
-    type: String,
-    default: ''
-  },
-  mainCategory: {
-    type: String,
-    default: ''
-  }
-})
-
-const emit = defineEmits(['error', 'loading'])
 
 const loading = ref(false)
 const chartError = ref('')
@@ -779,18 +875,20 @@ const getEmptyChartOption = () => {
 
 // 加载数据
 const loadData = async () => {
-  if (!props.startDate || !props.endDate) {
+  const start = localStartDate.value || props.startDate
+  const end = localEndDate.value || props.endDate
+  if (!start || !end) {
     return
   }
-  
+
   loading.value = true
   chartError.value = ''
   emit('loading', true)
   
   try {
     const params = {
-      startDate: props.startDate,
-      endDate: props.endDate,
+      startDate: start,
+      endDate: end,
       viewMode: viewMode.value,
       roleScope: roleScope.value
     }
@@ -922,8 +1020,20 @@ const downloadCsv = (rows, filenamePrefix) => {
   ElMessage.success('导出成功')
 }
 
-// 监听参数变化
-watch([() => props.startDate, () => props.endDate, () => props.userName, () => props.mainCategory], () => {
+// 与页面顶部日期筛选同步
+watch(
+  () => [props.startDate, props.endDate],
+  ([s, e]) => {
+    if (!s || !e) return
+    if (localStartDate.value !== s || localEndDate.value !== e) {
+      localStartDate.value = s
+      localEndDate.value = e
+      loadData()
+    }
+  }
+)
+
+watch([() => props.userName, () => props.mainCategory], () => {
   loadData()
 })
 
@@ -935,8 +1045,12 @@ const handleResize = () => {
 }
 
 onMounted(async () => {
+  localStartDate.value = props.startDate || ''
+  localEndDate.value = props.endDate || ''
   await loadDepartmentTree()
-  loadData()
+  if (localStartDate.value && localEndDate.value) {
+    loadData()
+  }
   window.addEventListener('resize', handleResize)
 })
 

@@ -268,6 +268,8 @@
           :user-name="queryForm.userName"
           :main-category="queryForm.mainCategory"
           :group-by="queryForm.groupBy"
+          @update:start-date="queryForm.startDate = $event"
+          @update:end-date="queryForm.endDate = $event"
           @loading="handleLoading"
           @error="handleError"
         />
@@ -670,9 +672,9 @@ onMounted(async () => {
   
   await getMainCategories()
   
-  // 默认日期：本月 1 号 至 今天（与「本月」快捷按钮一致，避免只查滚动 30 天导致历史数据看不到）
+  // 默认日期：今年 1 月 1 日 至 今天（可在概览内改时间或点快捷按钮）
   const endDate = new Date()
-  const startDate = new Date(endDate.getFullYear(), endDate.getMonth(), 1)
+  const startDate = new Date(endDate.getFullYear(), 0, 1)
 
   queryForm.endDate = endDate.toISOString().split('T')[0]
   queryForm.startDate = startDate.toISOString().split('T')[0]
