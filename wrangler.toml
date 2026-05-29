@@ -1,0 +1,9 @@
+# Cloudflare Pages 配置
+# 文档: https://developers.cloudflare.com/pages/
+name = "guanlihoutai-web"
+compatibility_date = "2024-08-01"
+pages_build_output_dir = "dist"
+
+[vars]
+# 构建时在 Cloudflare 控制台 Environment variables 中配置（需以 VITE_ 开头）
+# VITE_API_BASE_URL = "https://api.guanlixiatong.com/api"
