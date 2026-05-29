@@ -12,16 +12,7 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    sourcemap: false,
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          'element-plus': ['element-plus'],
-          echarts: ['echarts'],
-          vendor: ['vue', 'vue-router', 'pinia', 'axios']
-        }
-      }
-    }
+    sourcemap: false
   },
   preview: {
     port: 4173,

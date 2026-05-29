@@ -3,6 +3,16 @@ import { useUserStore } from '../stores/user'
 import router from '../router'
 import crypto from 'crypto-js'
 
+// 生产环境 Render 后端（构建未注入 VITE_ 变量时的兜底）
+const PRODUCTION_API_BASE = 'https://guanlihoutai-api.onrender.com/api'
+
+const resolveApiBaseUrl = () => {
+  const fromEnv = import.meta.env.VITE_API_BASE_URL
+  if (fromEnv) return fromEnv.replace(/\/$/, '')
+  if (import.meta.env.PROD) return PRODUCTION_API_BASE
+  return 'http://localhost:3001/api'
+}
+
 // API配置
 const API_CONFIG = {
   appid: import.meta.env.VITE_API_APPID || 'default_appid',
@@ -11,7 +21,7 @@ const API_CONFIG = {
 
 // 创建axios实例
 const service = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL,
+  baseURL: resolveApiBaseUrl(),
   timeout: 300000, // 请求超时时间（5分钟，百万级数据对比需要更长时间）
   headers: {
     'Content-Type': 'application/json'

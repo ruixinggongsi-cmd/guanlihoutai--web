@@ -19,7 +19,7 @@
 在 Pages → Settings → Environment variables 添加（与 `.env.production` 一致）：
 
 ```
-VITE_API_BASE_URL = https://api.guanlixiatong.com/api
+VITE_API_BASE_URL = https://guanlihoutai-api.onrender.com/api
 VITE_API_APPID = default_appid
 VITE_API_SECRET = default_secret
 ```
@@ -41,9 +41,7 @@ Pages → Custom domains → 添加：
 
 Render 侧：Service → Settings → Custom Domains → 添加 `api.guanlixiatong.com`。
 
-若暂未配置 `api` 子域名，构建时把 `VITE_API_BASE_URL` 改为：
-
-`https://guanlihoutai--api.onrender.com/api`
+当前后端地址：`https://guanlihoutai-api.onrender.com/api`（与 Render 服务名一致）
 
 ## 5. 重新部署
 
