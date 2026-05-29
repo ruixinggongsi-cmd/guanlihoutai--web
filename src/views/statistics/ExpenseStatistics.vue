@@ -151,15 +151,14 @@
           </div>
 
           <!-- 部门费用概览专用条件 -->
-          <div v-if="activeTab === 'overview'" class="space-y-3">
+          <div v-if="activeTab === 'overview'" class="space-y-3 md:col-span-2">
             <label class="block text-sm font-semibold text-gray-300 mb-2 flex items-center">
               <i class="fas fa-building mr-2 text-secondary"></i>
               统计说明
-              <span class="ml-1 text-xs text-gray-400">(部门维度)</span>
             </label>
             <div class="px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-gray-300 text-sm">
               <i class="fas fa-info-circle mr-2 text-info"></i>
-              按部门统计费用分布情况
+              支持按 <strong class="text-white">系统部门树（如市场部门→后台/第四梯队/野战团队）</strong>、<strong class="text-white">角色</strong> 筛选，并可查看 <strong class="text-white">申请记录</strong>
             </div>
           </div>
         </div>
@@ -509,7 +508,7 @@ const getCurrentTabDescription = () => {
     userTotal: '统计用户的费用总额及明细',
     categoryStats: '按费用分类统计支出情况',
     userBreakdown: '查看指定用户的分类费用占比',
-    overview: '按部门维度查看费用概览',
+    overview: '按系统创建的部门树、角色或申请记录查看费用概览',
     trend: '分析费用趋势变化',
     allApplications: '查看所有用户的费用申请记录（仅超级管理员）'
   }

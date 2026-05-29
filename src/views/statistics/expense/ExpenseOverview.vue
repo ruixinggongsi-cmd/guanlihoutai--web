@@ -3,7 +3,8 @@
   <div class="space-y-6">
     <!-- 图表显示 -->
     <div class="backdrop-blur-lg bg-white/10 rounded-2xl border border-white/20 shadow-xl p-6 transition-all duration-300 hover:shadow-2xl hover:bg-white/15 hover:translate-y-[-2px]">
-      <div class="flex items-center justify-between mb-4">
+      <div class="flex flex-col gap-4 mb-4">
+        <div class="flex items-center justify-between flex-wrap gap-3">
         <h3 class="text-xl font-bold text-white flex items-center">
           <i class="fas fa-chart-line mr-3 text-primary"></i>
           费用概览统计
@@ -19,18 +20,81 @@
           </button>
           <button
             @click="exportData"
-            :disabled="!tableData || tableData.length === 0"
+            :disabled="viewMode === 'records' ? recordsList.length === 0 : tableData.length === 0"
             class="px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-400/30 rounded-lg transition-all duration-300 flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <i class="fas fa-download"></i>
             <span>导出</span>
           </button>
         </div>
+        </div>
+
+        <!-- 查看维度 -->
+        <div class="flex flex-wrap items-center gap-3">
+          <div class="flex space-x-1 bg-white/5 rounded-xl p-1">
+            <button
+              v-for="tab in viewModeTabs"
+              :key="tab.value"
+              type="button"
+              @click="switchViewMode(tab.value)"
+              :class="[
+                'px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300',
+                viewMode === tab.value
+                  ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-lg'
+                  : 'text-gray-400 hover:text-white hover:bg-white/10'
+              ]"
+            >
+              <i :class="tab.icon" class="mr-1.5"></i>{{ tab.label }}
+            </button>
+          </div>
+
+          <!-- 部门树筛选（与部门管理一致，含多级） -->
+          <div class="flex flex-wrap items-center gap-2 min-w-[220px]">
+            <span class="text-xs text-gray-400 shrink-0">
+              <i class="fas fa-sitemap mr-1"></i>部门
+            </span>
+            <select
+              v-model="selectedDepartmentId"
+              @change="onDepartmentChange"
+              :disabled="departmentsLoading"
+              class="min-w-[200px] max-w-[320px] px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary appearance-none"
+            >
+              <option value="" class="bg-slate-800">全部顶级部门</option>
+              <option
+                v-for="opt in flatDepartmentOptions"
+                :key="opt.id"
+                :value="opt.id"
+                class="bg-slate-800"
+              >{{ opt.label }}</option>
+            </select>
+          </div>
+
+          <!-- 角色筛选 -->
+          <div v-if="viewMode === 'role' || viewMode === 'records'" class="flex items-center gap-2 flex-wrap">
+            <span class="text-xs text-gray-400">角色：</span>
+            <button
+              v-for="opt in roleScopeOptions"
+              :key="opt.value"
+              type="button"
+              @click="roleScope = opt.value; recordsPage = 1; loadData()"
+              :class="scopeBtnClass(roleScope === opt.value)"
+            >{{ opt.label }}</button>
+          </div>
+
+          <!-- 申请记录关键词 -->
+          <div v-if="viewMode === 'records'" class="flex items-center gap-2">
+            <input
+              v-model="recordsKeyword"
+              type="text"
+              placeholder="搜索费用名称/申请人"
+              class="px-3 py-1.5 bg-white/10 border border-white/20 rounded-lg text-white text-sm min-w-[160px]"
+              @keyup.enter="recordsPage = 1; loadData()"
+            />
+          </div>
+        </div>
       </div>
       
-      
-      
-      <div class="chart-container-wrapper">
+      <div v-if="viewMode !== 'records'" class="chart-container-wrapper">
          <div v-if="loading" class="flex items-center justify-center h-96 text-gray-400">
         <div class="text-center space-y-4">
           <div class="inline-block p-3 rounded-full bg-white/5 animate-pulse">
@@ -55,7 +119,7 @@
         </div>
       </div>
       
-      <div v-if="!chartData || chartData.length === 0" class="flex items-center justify-center h-96 text-gray-400">
+      <div v-if="!hasChartItems" class="flex items-center justify-center h-96 text-gray-400">
         <div class="text-center space-y-4">
           <div class="inline-block p-3 rounded-full bg-white/5">
             <i class="fas fa-inbox text-4xl opacity-50"></i>
@@ -70,10 +134,74 @@
       </div>
     </div>
     
-    <!-- 数据列表 -->
-    <div class="backdrop-blur-lg bg-white/10 rounded-2xl border border-white/20 shadow-xl p-6 transition-all duration-300 hover:shadow-2xl hover:bg-white/15 hover:translate-y-[-2px]">
+    <!-- 申请记录列表 -->
+    <div
+      v-if="viewMode === 'records'"
+      class="backdrop-blur-lg bg-white/10 rounded-2xl border border-white/20 shadow-xl p-6"
+    >
       <div class="flex items-center justify-between mb-4">
-        <h3 class="text-lg font-semibold text-white">详细数据</h3>
+        <h3 class="text-lg font-semibold text-white">申请记录</h3>
+        <span class="text-sm text-gray-400">共 {{ recordsTotal }} 条</span>
+      </div>
+      <div class="overflow-x-auto data-table-wrapper">
+        <table class="w-full text-sm text-left">
+          <thead class="text-xs text-gray-400 uppercase bg-white/5">
+            <tr>
+              <th class="px-4 py-3 text-gray-300">费用名称</th>
+              <th class="px-4 py-3 text-gray-300">申请人</th>
+              <th class="px-4 py-3 text-gray-300">部门</th>
+              <th class="px-4 py-3 text-gray-300">角色</th>
+              <th class="px-4 py-3 text-gray-300">金额</th>
+              <th class="px-4 py-3 text-gray-300">日期</th>
+              <th class="px-4 py-3 text-gray-300">状态</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="row in recordsList"
+              :key="row.id"
+              class="border-b border-white/10 hover:bg-white/5"
+            >
+              <td class="px-4 py-3 text-white">{{ row.name }}</td>
+              <td class="px-4 py-3 text-white">{{ row.applicant_display }}</td>
+              <td class="px-4 py-3 text-gray-400">{{ row.department_name }}</td>
+              <td class="px-4 py-3 text-gray-400">{{ row.role_bucket || row.role_name }}</td>
+              <td class="px-4 py-3 text-emerald-300 font-semibold">{{ formatAmount(row.amount) }}</td>
+              <td class="px-4 py-3 text-gray-400">{{ row.date }}</td>
+              <td class="px-4 py-3">
+                <span class="px-2 py-1 rounded text-xs bg-white/10 text-gray-300">{{ statusLabel(row.status) }}</span>
+              </td>
+            </tr>
+            <tr v-if="recordsList.length === 0 && !loading">
+              <td colspan="7" class="px-6 py-8 text-center text-gray-400">暂无申请记录</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div v-if="recordsTotal > recordsPageSize" class="flex justify-center gap-2 mt-4">
+        <button
+          type="button"
+          :disabled="recordsPage <= 1"
+          class="px-3 py-1.5 rounded-lg bg-white/10 text-white text-sm disabled:opacity-40"
+          @click="recordsPage--; loadData()"
+        >上一页</button>
+        <span class="text-gray-400 text-sm py-1.5">{{ recordsPage }} / {{ recordsTotalPages }}</span>
+        <button
+          type="button"
+          :disabled="recordsPage >= recordsTotalPages"
+          class="px-3 py-1.5 rounded-lg bg-white/10 text-white text-sm disabled:opacity-40"
+          @click="recordsPage++; loadData()"
+        >下一页</button>
+      </div>
+    </div>
+
+    <!-- 统计汇总列表 -->
+    <div
+      v-else
+      class="backdrop-blur-lg bg-white/10 rounded-2xl border border-white/20 shadow-xl p-6 transition-all duration-300 hover:shadow-2xl hover:bg-white/15 hover:translate-y-[-2px]"
+    >
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-semibold text-white">{{ summaryTableTitle }}</h3>
         <span class="text-sm text-gray-400">共 {{ total }} 条记录</span>
       </div>
       
@@ -93,13 +221,15 @@
               <td class="px-6 py-4">
                 <span :class="[
                   'px-3 py-1.5 rounded-full text-xs font-medium backdrop-blur-sm',
-                  item.statType === '部门' 
+                  item.statType === '角色'
+                    ? 'bg-gradient-to-r from-amber-500/20 to-orange-500/20 text-amber-300 border border-amber-400/30'
+                    : item.statType === '部门' 
                     ? 'bg-gradient-to-r from-blue-500/20 to-cyan-500/20 text-blue-300 border border-blue-400/30'
                     : 'bg-gradient-to-r from-purple-500/20 to-purple-600/20 text-purple-300 border border-purple-400/30'
                 ]">
                   <i :class="[
                     'mr-1',
-                    item.statType === '部门' ? 'fas fa-building text-blue-400' : 'fas fa-tag text-purple-400'
+                    item.statType === '角色' ? 'fas fa-user-tag text-amber-400' : item.statType === '部门' ? 'fas fa-building text-blue-400' : 'fas fa-tag text-purple-400'
                   ]"></i>
                   {{ item.statType }}
                 </span>
@@ -140,10 +270,116 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import * as echarts from 'echarts'
 import { getExpenseOverview } from '@/api/expenseStatistics'
+import { getDepartmentTree } from '@/api/department'
 import { ElMessage } from 'element-plus'
+
+const viewModeTabs = [
+  { label: '部门', value: 'department', icon: 'fas fa-building' },
+  { label: '角色', value: 'role', icon: 'fas fa-user-tag' },
+  { label: '申请记录', value: 'records', icon: 'fas fa-list-alt' }
+]
+
+const roleScopeOptions = [
+  { label: '全部', value: 'all' },
+  { label: '总监', value: '总监' },
+  { label: '管理员', value: '管理员' },
+  { label: '组员', value: '组员' }
+]
+
+const viewMode = ref('department')
+const selectedDepartmentId = ref('')
+const departmentTree = ref([])
+const departmentsLoading = ref(false)
+const flatDepartmentOptions = ref([])
+const roleScope = ref('all')
+const recordsKeyword = ref('')
+const recordsPage = ref(1)
+const recordsPageSize = ref(20)
+const recordsList = ref([])
+const recordsTotal = ref(0)
+
+const recordsTotalPages = computed(() =>
+  Math.max(1, Math.ceil(recordsTotal.value / recordsPageSize.value))
+)
+
+const selectedDeptName = computed(() => {
+  if (!selectedDepartmentId.value) return ''
+  const opt = flatDepartmentOptions.value.find((o) => o.id === selectedDepartmentId.value)
+  return opt?.name || ''
+})
+
+const summaryTableTitle = computed(() => {
+  if (viewMode.value === 'role') {
+    return selectedDeptName.value
+      ? `角色费用汇总 · ${selectedDeptName.value}（含下级）`
+      : '角色费用汇总'
+  }
+  if (!selectedDepartmentId.value) return '顶级部门费用汇总'
+  return `${selectedDeptName.value} · 下级团队/小组明细`
+})
+
+const flattenDepartmentTree = (nodes, depth = 0) => {
+  const result = []
+  ;(nodes || []).forEach((node) => {
+    const name = node.department_name || node.name || '未命名'
+    const prefix = depth > 0 ? `${'　'.repeat(depth)}└ ` : ''
+    result.push({ id: node.id, name, label: `${prefix}${name}`, depth })
+    if (node.children?.length) {
+      result.push(...flattenDepartmentTree(node.children, depth + 1))
+    }
+  })
+  return result
+}
+
+const loadDepartmentTree = async () => {
+  departmentsLoading.value = true
+  try {
+    const res = await getDepartmentTree()
+    if (res.success) {
+      departmentTree.value = res.data || []
+      flatDepartmentOptions.value = flattenDepartmentTree(departmentTree.value)
+    }
+  } catch (e) {
+    console.error('加载部门树失败:', e)
+  } finally {
+    departmentsLoading.value = false
+  }
+}
+
+const onDepartmentChange = () => {
+  recordsPage.value = 1
+  loadData()
+}
+
+const hasChartItems = computed(() => {
+  if (viewMode.value === 'records') return true
+  return tableData.value.length > 0
+})
+
+const scopeBtnClass = (active) =>
+  active
+    ? 'px-3 py-1.5 rounded-lg text-sm bg-primary/30 text-white border border-primary/40'
+    : 'px-3 py-1.5 rounded-lg text-sm bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'
+
+const statusLabel = (status) => {
+  const map = {
+    pending: '待审批',
+    approving: '审批中',
+    approved: '已通过',
+    rejected: '已拒绝',
+    cancelled: '已取消'
+  }
+  return map[status] || status || '-'
+}
+
+const switchViewMode = (mode) => {
+  viewMode.value = mode
+  recordsPage.value = 1
+  loadData()
+}
 
 const props = defineProps({
   startDate: {
@@ -243,46 +479,30 @@ const initChart = async () => {
   }
 }
 
+const mapStatItems = (items, defaultType = '部门') =>
+  (items || []).map((item, index) => ({
+    name: item.name || item.department_name || item.category_name || `项${index + 1}`,
+    amount: parseFloat(item.total_amount || item.amount || 0),
+    type: item.stat_type || defaultType,
+    applicationCount: parseInt(item.application_count || item.applicationCount || 0, 10),
+    percentage: parseFloat(item.percentage || 0)
+  }))
+
 // 获取图表配置
 const getChartOption = (data) => {
   let overviewData = []
-  
-  // 检查数据结构
+
   if (data && typeof data === 'object' && !Array.isArray(data)) {
-    // 如果返回的是分组数据对象
-    const departmentData = data.department || data.departments || []
-    const categoryData = data.category || data.categories || []
-    
-    // 合并部门数据和分类数据
-    const allData = [
-      ...departmentData.map((item, index) => ({
-        name: item.department_name || item.name || `部门${index + 1}`,
-        amount: parseFloat(item.total_amount || item.amount || 0),
-        type: '部门',
-        applicationCount: parseInt(item.application_count || item.applicationCount || 0),
-        percentage: parseFloat(item.percentage || 0)
-      })),
-      ...categoryData.map((item, index) => ({
-        name: item.category_name || item.name || `分类${index + 1}`,
-        amount: parseFloat(item.total_amount || item.amount || 0),
-        type: '分类',
-        applicationCount: parseInt(item.application_count || item.applicationCount || 0),
-        percentage: parseFloat(item.percentage || 0)
-      }))
-    ].sort((a, b) => b.amount - a.amount).slice(0, 10)
-    
-    overviewData = allData
+    const primary =
+      data.items ||
+      (viewMode.value === 'role' ? data.role : null) ||
+      data.department ||
+      data.departments ||
+      []
+    overviewData = mapStatItems(primary, viewMode.value === 'role' ? '角色' : '部门')
+      .sort((a, b) => b.amount - a.amount)
   } else if (Array.isArray(data)) {
-    // 如果已经是数组格式，直接使用
-    overviewData = data.map((item, index) => ({
-      name: item.name || item.department_name || item.category_name || '未知',
-      amount: parseFloat(item.total_amount || item.amount || 0),
-      type: item.stat_type || '其他',
-      applicationCount: parseInt(item.application_count || item.applicationCount || 0),
-      percentage: parseFloat(item.percentage || 0)
-    })).sort((a, b) => b.amount - a.amount).slice(0, 10)
-  } else {
-    overviewData = []
+    overviewData = mapStatItems(data).sort((a, b) => b.amount - a.amount)
   }
   
   // 准备图表数据
@@ -295,6 +515,10 @@ const getChartOption = (data) => {
       '部门': new echarts.graphic.LinearGradient(0, 0, 0, 1, [
         { offset: 0, color: '#6366f1' },
         { offset: 1, color: '#8b5cf6' }
+      ]),
+      '角色': new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+        { offset: 0, color: '#f59e0b' },
+        { offset: 1, color: '#ea580c' }
       ]),
       '分类': new echarts.graphic.LinearGradient(0, 0, 0, 1, [
         { offset: 0, color: '#ec4899' },
@@ -331,7 +555,7 @@ const getChartOption = (data) => {
           <div class="p-3 space-y-2">
             <div class="font-semibold text-white">${item.name}</div>
             <div class="flex items-center space-x-2">
-              <div class="w-3 h-3 rounded-full" style="background: ${dataItem.type === '部门' ? '#6366f1' : dataItem.type === '分类' ? '#ec4899' : '#10b981'}"></div>
+              <div class="w-3 h-3 rounded-full" style="background: ${dataItem.type === '部门' ? '#6366f1' : dataItem.type === '角色' ? '#f59e0b' : dataItem.type === '分类' ? '#ec4899' : '#10b981'}"></div>
               <span>费用总额: ${formatAmount(item.value)}</span>
             </div>
             <div class="flex items-center space-x-2">
@@ -466,7 +690,9 @@ const updateChart = async (data) => {
   if (!chartInstance) return false
   
   try {
-    if (!data || data.length === 0) {
+    const items = data?.items || data?.department || data?.role || data
+    const isEmpty = !items || (Array.isArray(items) && items.length === 0)
+    if (isEmpty) {
       chartInstance.setOption(getEmptyChartOption())
     } else {
       chartInstance.setOption(getChartOption(data))
@@ -552,66 +778,57 @@ const loadData = async () => {
   try {
     const params = {
       startDate: props.startDate,
-      endDate: props.endDate
+      endDate: props.endDate,
+      viewMode: viewMode.value,
+      roleScope: roleScope.value
     }
-    
-    if (props.userName) {
-      params.userName = props.userName
+    if (selectedDepartmentId.value) {
+      params.departmentId = selectedDepartmentId.value
     }
-    
-    if (props.mainCategory) {
-      params.mainCategory = props.mainCategory
+
+    if (viewMode.value === 'records') {
+      params.page = recordsPage.value
+      params.pageSize = recordsPageSize.value
+      params.keyword = recordsKeyword.value
     }
-    
-    console.log('费用概览查询参数:', params)
+
+    if (props.userName) params.userName = props.userName
+    if (props.mainCategory) params.mainCategory = props.mainCategory
+
     const res = await getExpenseOverview(params)
-    
+
     if (res.success) {
-       loading.value = false
-      const data = res.data || []
-      chartData.value = data
-      
-      // 处理表格数据
-      let tableItems = []
-      if (data && typeof data === 'object' && !Array.isArray(data)) {
-        const departmentData = data.department || data.departments || []
-        const categoryData = data.category || data.categories || []
-        
-        tableItems = [
-          ...departmentData.map((item, index) => ({
-            id: `dept_${index}`,
-            statType: '部门',
-            name: item.department_name || item.name || `部门${index + 1}`,
-            totalAmount: parseFloat(item.total_amount || item.amount || 0),
-            applicationCount: parseInt(item.application_count || item.applicationCount || 0),
-            percentage: parseFloat(item.percentage || 0)
-          })),
-          ...categoryData.map((item, index) => ({
-            id: `cat_${index}`,
-            statType: '分类',
-            name: item.category_name || item.name || `分类${index + 1}`,
-            totalAmount: parseFloat(item.total_amount || item.amount || 0),
-            applicationCount: parseInt(item.application_count || item.applicationCount || 0),
-            percentage: parseFloat(item.percentage || 0)
-          }))
-        ].sort((a, b) => b.totalAmount - a.totalAmount)
-      } else if (Array.isArray(data)) {
-        tableItems = data.map((item, index) => ({
-          id: `item_${index}`,
-          statType: item.stat_type || '其他',
-          name: item.name || '未知',
-          totalAmount: parseFloat(item.total_amount || item.amount || 0),
-          applicationCount: parseInt(item.application_count || item.applicationCount || 0),
-          percentage: parseFloat(item.percentage || 0)
-        })).sort((a, b) => b.totalAmount - a.totalAmount)
+      loading.value = false
+
+      if (viewMode.value === 'records') {
+        const payload = res.data || {}
+        recordsList.value = payload.list || []
+        recordsTotal.value = payload.total || 0
+        tableData.value = []
+        total.value = 0
+        chartData.value = []
+        return
       }
-      
-      // 按总金额排序，降序排列
+
+      const data = res.data || {}
+      chartData.value = data
+
+      const primaryItems =
+        data.items || (viewMode.value === 'role' ? data.role : data.department) || []
+
+      const tableItems = (Array.isArray(primaryItems) ? primaryItems : []).map((item, index) => ({
+        id: `${viewMode.value}_${index}`,
+        statType: item.stat_type || (viewMode.value === 'role' ? '角色' : '部门'),
+        name: item.name || '未知',
+        totalAmount: parseFloat(item.total_amount || 0),
+        applicationCount: parseInt(item.application_count || 0, 10),
+        percentage: parseFloat(item.percentage || 0)
+      }))
+
       tableData.value = tableItems.sort((a, b) => b.totalAmount - a.totalAmount)
       total.value = tableItems.length
       await nextTick()
-      const updateSuccess = await updateChart(data)
-      
+      await updateChart(data)
     } else {
       chartError.value = res.message || '获取数据失败'
       emit('error', chartError.value)
@@ -633,12 +850,31 @@ const refreshData = () => {
 
 // 导出数据
 const exportData = () => {
+  if (viewMode.value === 'records') {
+    if (recordsList.value.length === 0) {
+      ElMessage.warning('暂无数据可导出')
+      return
+    }
+    const rows = recordsList.value.map((row, index) => ({
+      '序号': index + 1,
+      '费用名称': row.name,
+      '申请人': row.applicant_display,
+      '部门': row.department_name,
+      '角色': row.role_bucket || row.role_name,
+      '金额': row.amount,
+      '日期': row.date,
+      '状态': statusLabel(row.status)
+    }))
+    downloadCsv(rows, '费用申请记录')
+    return
+  }
+
   if (tableData.value.length === 0) {
     ElMessage.warning('暂无数据可导出')
     return
   }
   
-  const exportData = tableData.value.map((item, index) => ({
+  const exportRows = tableData.value.map((item, index) => ({
     '序号': index + 1,
     '统计类型': item.statType,
     '名称': item.name,
@@ -647,10 +883,14 @@ const exportData = () => {
     '占比': `${item.percentage}%`
   }))
   
-  const headers = Object.keys(exportData[0])
+  downloadCsv(exportRows, '费用概览统计')
+}
+
+const downloadCsv = (rows, filenamePrefix) => {
+  const headers = Object.keys(rows[0])
   const csvContent = [
     headers.join(','),
-    ...exportData.map(row => 
+    ...rows.map(row =>
       headers.map(header => {
         const value = row[header]
         if (typeof value === 'string' && (value.includes(',') || value.includes('"'))) {
@@ -660,13 +900,12 @@ const exportData = () => {
       }).join(',')
     )
   ].join('\n')
-  
+
   const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
   const link = document.createElement('a')
   link.href = URL.createObjectURL(blob)
-  link.download = `费用概览统计_${new Date().toLocaleDateString('zh-CN')}.csv`
+  link.download = `${filenamePrefix}_${new Date().toLocaleDateString('zh-CN')}.csv`
   link.click()
-  
   ElMessage.success('导出成功')
 }
 
@@ -682,8 +921,8 @@ const handleResize = () => {
   }
 }
 
-onMounted(() => {
-  // 先加载数据，数据加载后会自动初始化和更新图表
+onMounted(async () => {
+  await loadDepartmentTree()
   loadData()
   window.addEventListener('resize', handleResize)
 })

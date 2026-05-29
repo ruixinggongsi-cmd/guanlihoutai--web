@@ -22,6 +22,11 @@ export const expenseStatisticsAPI = {
     return request.get('/expense-statistics/expense-overview', params)
   },
 
+  // 费用概览用部门树
+  getExpenseDepartmentTree() {
+    return request.get('/expense-statistics/department-tree')
+  },
+
   // 获取费用统计图表数据
   getExpenseChartData(params) {
     return request.get('/expense-statistics/expense-chart-data', params)
@@ -38,6 +43,7 @@ export const getUserExpenseTotal = (params) => expenseStatisticsAPI.getUserExpen
 export const getCategoryExpenseStats = (params) => expenseStatisticsAPI.getCategoryExpenseStats(params)
 export const getUserCategoryBreakdown = (params) => expenseStatisticsAPI.getUserCategoryBreakdown(params)
 export const getExpenseOverview = (params) => expenseStatisticsAPI.getExpenseOverview(params)
+export const getExpenseDepartmentTree = () => expenseStatisticsAPI.getExpenseDepartmentTree()
 export const getExpenseChartData = (params) => expenseStatisticsAPI.getExpenseChartData(params)
 export const getExpenseTrend = (params) => expenseStatisticsAPI.getExpenseTrend(params)
 
