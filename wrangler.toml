@@ -1,9 +1,10 @@
-# Cloudflare Pages 配置
-# 文档: https://developers.cloudflare.com/pages/
+# Cloudflare 部署（Workers 静态资源 / Pages 均可）
 name = "guanlihoutai-web"
 compatibility_date = "2024-08-01"
-pages_build_output_dir = "dist"
 
-[vars]
-# 构建时在 Cloudflare 控制台 Environment variables 中配置（需以 VITE_ 开头）
-# VITE_API_BASE_URL = "https://api.guanlixiatong.com/api"
+# Workers 部署：构建后把 dist 作为静态站点发布（SPA 路由）
+[assets]
+directory = "./dist"
+not_found_handling = "single-page-application"
+
+# 若使用 Cloudflare Pages（非 Workers）连接 Git，构建输出目录填 dist 即可，可不填 Deploy command
