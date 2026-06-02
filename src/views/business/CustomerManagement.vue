@@ -29,6 +29,14 @@
             </div>
             <div class="flex space-x-3">
               <button 
+                v-if="isSuperAdmin"
+                @click="deleteAllCustomers"
+                class="px-6 py-3 bg-gradient-to-r from-red-500 via-red-600 to-red-700 hover:from-red-600 hover:via-red-700 hover:to-red-800 text-white font-semibold rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-0.5 active:scale-95 flex items-center space-x-3 group"
+              >
+                <i class="fas fa-trash-alt group-hover:scale-110 transition-transform duration-300 text-sm"></i>
+                <span class="text-sm">删除全部数据</span>
+              </button>
+              <button 
                 v-permission="'customer:add'"
                 @click="showAddModal = true"
                 class="px-6 py-3 bg-gradient-to-r from-blue-500 via-blue-600 to-blue-700 hover:from-blue-600 hover:via-blue-700 hover:to-blue-800 text-white font-semibold rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-0.5 active:scale-95 flex items-center space-x-3 group"
@@ -45,6 +53,10 @@
 
       <!-- 搜索和筛选 -->
       <div class="backdrop-blur-lg bg-white/10 rounded-2xl border border-white/20 shadow-xl p-6 mb-8">
+        <p v-if="isSuperAdmin" class="text-sm text-purple-300 mb-4">
+          <i class="fas fa-shield-alt mr-1"></i>
+          超级管理员模式：当前可查看并管理全部用户的客户数据
+        </p>
         <div class="flex flex-wrap gap-4 items-center">
           <div class="flex-1 min-w-64">
             <div class="relative">
@@ -103,6 +115,7 @@
                 <th class="px-6 py-4 text-left text-sm font-semibold text-gray-300 uppercase tracking-wider">客户</th>
                 <th class="px-6 py-4 text-left text-sm font-semibold text-gray-300 uppercase tracking-wider">联系方式</th>
                 <th class="px-6 py-4 text-left text-sm font-semibold text-gray-300 uppercase tracking-wider">状态</th>
+                <th v-if="isSuperAdmin" class="px-6 py-4 text-left text-sm font-semibold text-gray-300 uppercase tracking-wider">创建人</th>
                 <th class="px-6 py-4 text-left text-sm font-semibold text-gray-300 uppercase tracking-wider">注册时间</th>
                 <th class="px-6 py-4 text-left text-sm font-semibold text-gray-300 uppercase tracking-wider">操作</th>
               </tr>
@@ -128,6 +141,9 @@
                   <span :class="getStatusClass(customer.status)" class="px-3 py-1 text-xs font-medium rounded-full">
                     {{ getStatusText(customer.status) }}
                   </span>
+                </td>
+                <td v-if="isSuperAdmin" class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                  {{ customer.creator_name || '-' }}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-400">{{ formatDate(customer.createdAt) }}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -598,10 +614,12 @@ import { ref, computed, onMounted } from 'vue'
 import NavigationBar from '../../components/NavigationBar.vue'
 import { customerAPI } from '../../api/customers.js'
 import { contactRecordAPI } from '../../api/contactRecords.js'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import UserSelectorModal from '../../components/UserSelectorModal.vue'
+import { permissionUtils } from '../../utils/permission.js'
 
 // 响应式数据
+const isSuperAdmin = computed(() => permissionUtils.isSuperAdmin())
 const customers = ref([])
 const searchKeyword = ref('')
 const statusFilter = ref('')
@@ -752,6 +770,45 @@ const deleteCustomer = async (customer) => {
     } catch (error) {
     ElMessage.error({message: '删除客户失败', duration: 1000})
   }
+  }
+}
+
+const deleteAllCustomers = async () => {
+  try {
+    await ElMessageBox.confirm(
+      `此操作将永久删除数据库中的全部客户数据（共 ${totalCustomers.value} 条），且不可恢复。\n\n确定要继续吗？`,
+      '危险操作：删除全部客户数据',
+      {
+        confirmButtonText: '确认删除全部',
+        cancelButtonText: '取消',
+        type: 'warning',
+        confirmButtonClass: 'el-button--danger'
+      }
+    )
+
+    await ElMessageBox.prompt(
+      '请输入「删除全部」以确认此操作',
+      '二次确认',
+      {
+        confirmButtonText: '执行删除',
+        cancelButtonText: '取消',
+        inputPattern: /^删除全部$/,
+        inputErrorMessage: '请输入「删除全部」'
+      }
+    )
+
+    const response = await customerAPI.deleteAllCustomers()
+    if (response.success) {
+      ElMessage.success({ message: response.message || '全部客户数据已删除', duration: 3000 })
+      currentPage.value = 1
+      loadData()
+    } else {
+      ElMessage.error({ message: response.message || '删除失败', duration: 3000 })
+    }
+  } catch (error) {
+    if (error !== 'cancel' && error?.action !== 'cancel') {
+      ElMessage.error({ message: error?.response?.data?.message || '删除失败', duration: 3000 })
+    }
   }
 }
 

@@ -27,6 +27,14 @@
               </div>
             </div>
             <div class="flex space-x-3">
+              <button
+                v-if="isSuperAdmin"
+                @click="deleteAllDatabaseCustomers"
+                class="px-6 py-3 bg-gradient-to-r from-red-500 via-red-600 to-red-700 hover:from-red-600 hover:via-red-700 hover:to-red-800 text-white font-semibold rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-0.5 active:scale-95 flex items-center space-x-3 group"
+              >
+                <i class="fas fa-trash-alt group-hover:scale-110 transition-transform duration-300 text-sm"></i>
+                <span class="text-sm">删除全部数据</span>
+              </button>
               <button 
                 @click="loadDatabaseStats"
                 class="px-6 py-3 bg-gradient-to-r from-blue-500 via-blue-600 to-blue-700 hover:from-blue-600 hover:via-blue-700 hover:to-blue-800 text-white font-semibold rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-0.5 active:scale-95 flex items-center space-x-3 group"
@@ -41,7 +49,7 @@
 
       <!-- 底料数据库统计 -->
       <div class="backdrop-blur-lg bg-white/10 rounded-2xl border border-white/20 shadow-xl p-6 mb-8">
-        <div class="flex items-center justify-between">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
             <h2 class="text-xl font-bold text-white mb-2">底料数据库</h2>
             <p class="text-gray-400">当前数据库中的客户记录总数</p>
@@ -51,6 +59,20 @@
             <div class="text-sm text-gray-400">条客户记录</div>
           </div>
         </div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6 pt-6 border-t border-white/10">
+          <div
+            v-for="option in compareScopeOptions"
+            :key="option.value"
+            class="flex items-center justify-between px-4 py-3 rounded-xl bg-white/5 border border-white/10"
+          >
+            <span class="text-gray-300">{{ option.label }}</span>
+            <span :class="option.countClass" class="text-lg font-bold">{{ getStatusCount(option.value) }}</span>
+          </div>
+        </div>
+        <p v-if="isSuperAdmin" class="text-sm text-purple-300 mt-4">
+          <i class="fas fa-shield-alt mr-1"></i>
+          超级管理员权限：可查看并删除全部客户数据
+        </p>
       </div>
 
       <!-- 数据输入区域 -->
@@ -87,6 +109,72 @@
               <i class="fas fa-check-circle mr-1"></i>
               已加载 {{ customerList.length }} 条数据
             </span>
+          </div>
+        </div>
+
+        <!-- 对比范围选择 -->
+        <div class="mb-6 p-4 bg-white/5 border border-white/10 rounded-xl">
+          <label class="block text-sm font-medium text-gray-300 mb-3">
+            <i class="fas fa-filter mr-1"></i>
+            对比范围（选择与哪些客户数据进行对比）
+          </label>
+          <div class="flex flex-wrap gap-4">
+            <label
+              v-for="option in compareScopeOptions"
+              :key="option.value"
+              class="flex items-center space-x-2 cursor-pointer px-4 py-2 rounded-lg border transition-all"
+              :class="selectedCompareScopes.includes(option.value)
+                ? option.selectedClass
+                : 'bg-white/5 border-white/20 text-gray-400 hover:bg-white/10'"
+            >
+              <input
+                type="checkbox"
+                :value="option.value"
+                v-model="selectedCompareScopes"
+                class="rounded border-white/30 bg-white/10 text-primary focus:ring-primary"
+              >
+              <span>{{ option.label }}</span>
+              <span class="text-xs opacity-70">({{ getStatusCount(option.value) }})</span>
+            </label>
+          </div>
+          <p v-if="selectedCompareScopes.length === 0" class="text-yellow-400 text-sm mt-2">
+            <i class="fas fa-exclamation-triangle mr-1"></i>
+            请至少选择一种客户类型进行对比
+          </p>
+        </div>
+
+        <!-- 默认导入状态 -->
+        <div class="mb-6 p-4 bg-white/5 border border-white/10 rounded-xl">
+          <label class="block text-sm font-medium text-gray-300 mb-3">
+            <i class="fas fa-tags mr-1"></i>
+            导入客户状态（上传后可批量修改）
+          </label>
+          <div class="flex flex-wrap items-center gap-3">
+            <select
+              v-model="defaultImportStatus"
+              class="px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              <option v-for="option in importStatusOptions" :key="option" :value="option" class="bg-slate-800">
+                {{ option }}
+              </option>
+            </select>
+            <button
+              @click="applyDefaultStatusToAll"
+              :disabled="customerList.length === 0"
+              class="px-4 py-2 bg-blue-500/20 text-blue-400 border border-blue-500/50 rounded-lg hover:bg-blue-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <i class="fas fa-check-double mr-1"></i>
+              应用到全部
+            </button>
+            <button
+              v-if="compareResults"
+              @click="applyDefaultStatusToNewResults"
+              :disabled="Number(compareResults.summary?.unique || 0) === 0"
+              class="px-4 py-2 bg-green-500/20 text-green-400 border border-green-500/50 rounded-lg hover:bg-green-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <i class="fas fa-user-plus mr-1"></i>
+              应用到全部新增
+            </button>
           </div>
         </div>
 
@@ -147,7 +235,10 @@
             <div class="flex-1">
               <div class="text-sm text-gray-400 mb-2">
                 <i class="fas fa-info-circle mr-1"></i>
-                对比规则：通过电话号码与底料数据库进行对比
+                对比规则：通过电话号码与所选范围的客户数据进行对比
+                <span v-if="selectedCompareScopes.length > 0" class="text-blue-300">
+                  （{{ selectedCompareScopeLabels.join('、') }}）
+                </span>
               </div>
               <div v-if="customerList.length > 0 && !comparing" class="text-sm text-green-400">
                 <i class="fas fa-check-circle mr-1"></i>
@@ -161,7 +252,7 @@
             <div class="flex items-end">
               <button 
                 @click="startCompare"
-                :disabled="customerList.length === 0 || comparing"
+                :disabled="customerList.length === 0 || comparing || selectedCompareScopes.length === 0"
                 class="px-8 py-3 bg-gradient-to-r from-green-500 via-green-600 to-green-700 hover:from-green-600 hover:via-green-700 hover:to-green-800 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-3 text-lg"
               >
                 <i v-if="comparing" class="fas fa-spinner fa-spin"></i>
@@ -402,7 +493,17 @@
                   <td class="px-4 py-3 text-gray-300">{{ result.email || '-' }}</td>
                   <td class="px-4 py-3 text-gray-300">{{ result.company || '-' }}</td>
                   <td class="px-4 py-3">
-                    <span 
+                    <select
+                      v-if="!result.isDuplicate"
+                      v-model="result.status"
+                      class="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                    >
+                      <option v-for="option in importStatusOptions" :key="option" :value="option" class="bg-slate-800">
+                        {{ option }}
+                      </option>
+                    </select>
+                    <span
+                      v-else
                       :class="getCustomerStatusClass(result.status)"
                       class="px-2 py-1 rounded text-xs font-semibold"
                     >
@@ -418,7 +519,13 @@
                       >
                         <div class="text-yellow-400 mb-1">
                           <i class="fas fa-link mr-1"></i>
-                          {{ match.name }} ({{ match.phone }}) 
+                          {{ match.name }} ({{ match.phone }})
+                          <span
+                            :class="getCustomerStatusClass(match.status)"
+                            class="ml-2 px-2 py-0.5 rounded text-xs"
+                          >
+                            {{ getCustomerStatusText(match.status) }}
+                          </span>
                           <span v-if="match.email" class="text-gray-500">- {{ match.email }}</span>
                         </div>
                         <div class="text-gray-400 ml-4 space-x-3">
@@ -494,6 +601,8 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import NavigationBar from '../../components/NavigationBar.vue'
 import { customerDataCompareAPI } from '../../api/customerDataCompare.js'
+import { customerAPI } from '../../api/customers.js'
+import { permissionUtils } from '../../utils/permission.js'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as XLSX from 'xlsx'
 
@@ -507,6 +616,16 @@ const uploadedFileName = ref('')
 const currentPage = ref(1)
 const pageSize = ref(100)
 const showInputData = ref(true) // 控制显示数据输入还是对比结果
+
+const compareScopeOptions = [
+  { label: '数据', value: 'active', countClass: 'text-blue-400', selectedClass: 'bg-blue-500/20 border-blue-500/50 text-blue-300' },
+  { label: '意向客户', value: 'inactive', countClass: 'text-yellow-400', selectedClass: 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' },
+  { label: '进群客户', value: 'vip', countClass: 'text-green-400', selectedClass: 'bg-green-500/20 border-green-500/50 text-green-300' }
+]
+const importStatusOptions = ['数据', '意向客户', '进群客户']
+const selectedCompareScopes = ref(['active', 'inactive', 'vip'])
+const defaultImportStatus = ref('数据')
+const isSuperAdmin = computed(() => permissionUtils.isSuperAdmin())
 
 // 进度状态
 const compareProgress = ref({
@@ -538,6 +657,102 @@ const loadDatabaseStats = async () => {
     console.error('获取统计信息失败:', error)
     ElMessage.error({message: '获取统计信息失败', duration: 2000})
   }
+}
+
+const getStatusCount = (status) => {
+  return databaseStats.value.statusCounts?.[status] ?? 0
+}
+
+const selectedCompareScopeLabels = computed(() => {
+  return compareScopeOptions
+    .filter(option => selectedCompareScopes.value.includes(option.value))
+    .map(option => option.label)
+})
+
+const normalizeImportStatus = (status) => {
+  const normalized = getCustomerStatusText(status)
+  return importStatusOptions.includes(normalized) ? normalized : '数据'
+}
+
+const applyDefaultStatusToAll = () => {
+  if (customerList.value.length === 0) {
+    ElMessage.warning({ message: '没有可修改的数据', duration: 2000 })
+    return
+  }
+  customerList.value.forEach(customer => {
+    customer.status = defaultImportStatus.value
+  })
+  ElMessage.success({ message: `已将 ${customerList.value.length} 条数据状态设为「${defaultImportStatus.value}」`, duration: 2000 })
+}
+
+const applyDefaultStatusToNewResults = () => {
+  if (!compareResults.value?.results) {
+    ElMessage.warning({ message: '没有对比结果', duration: 2000 })
+    return
+  }
+  let count = 0
+  compareResults.value.results.forEach(result => {
+    if (!result.isDuplicate) {
+      result.status = defaultImportStatus.value
+      count++
+    }
+  })
+  ElMessage.success({ message: `已将 ${count} 条新增数据状态设为「${defaultImportStatus.value}」`, duration: 2000 })
+}
+
+const deleteAllDatabaseCustomers = async () => {
+  const scopeLabels = selectedCompareScopeLabels.value
+  const scopeStatuses = selectedCompareScopes.value.length > 0
+    ? [...selectedCompareScopes.value]
+    : null
+  const scopeText = scopeStatuses
+    ? `所选范围：${scopeLabels.join('、')}`
+    : '全部客户数据'
+
+  try {
+    await ElMessageBox.confirm(
+      `此操作将永久删除数据库中的客户数据（${scopeText}），且不可恢复。\n\n当前数据库共 ${databaseStats.value.totalCustomers || 0} 条记录。\n\n确定要继续吗？`,
+      '危险操作：删除客户数据',
+      {
+        confirmButtonText: '继续',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+
+    await ElMessageBox.prompt(
+      '请输入「删除全部」以确认此操作',
+      '二次确认',
+      {
+        confirmButtonText: '执行删除',
+        cancelButtonText: '取消',
+        inputPattern: /^删除全部$/,
+        inputErrorMessage: '请输入「删除全部」'
+      }
+    )
+
+    const response = await customerAPI.deleteAllCustomers(scopeStatuses)
+    if (response.success) {
+      ElMessage.success({ message: response.message || '客户数据已删除', duration: 3000 })
+      compareResults.value = null
+      showInputData.value = true
+      await loadDatabaseStats()
+    } else {
+      ElMessage.error({ message: response.message || '删除失败', duration: 3000 })
+    }
+  } catch (error) {
+    if (error !== 'cancel' && error?.action !== 'cancel') {
+      ElMessage.error({ message: error?.response?.data?.message || '删除失败', duration: 3000 })
+    }
+  }
+}
+
+const normalizeCompareResultStatuses = (results = []) => {
+  results.forEach(result => {
+    if (!result.isDuplicate) {
+      result.status = normalizeImportStatus(result.status)
+    }
+  })
 }
 
 const downloadTemplate = () => {
@@ -964,7 +1179,7 @@ const handleFileUpload = async (event) => {
       email: row['邮箱'] || row['email'] || row['Email'] || '',
       company: row['公司'] || row['company'] || row['Company'] || '',
       address: row['地址'] || row['address'] || row['Address'] || '',
-      status: row['状态'] || row['status'] || row['Status'] || '数据',
+      status: normalizeImportStatus(row['状态'] || row['status'] || row['Status'] || defaultImportStatus.value),
       notes: row['备注'] || row['notes'] || row['Notes'] || ''
     })).filter(c => c.name || c.phone || c.email) // 过滤空行
     
@@ -982,7 +1197,7 @@ const addNewRow = () => {
     email: '',
     company: '',
     address: '',
-    status: '数据',
+    status: defaultImportStatus.value,
     notes: ''
   })
 }
@@ -1003,6 +1218,11 @@ const removeRowByIndex = (index) => {
 const startCompare = async () => {
   if (customerList.value.length === 0) {
     ElMessage.warning({message: '请先输入或上传客户数据', duration: 2000})
+    return
+  }
+
+  if (selectedCompareScopes.value.length === 0) {
+    ElMessage.warning({message: '请至少选择一种客户类型进行对比', duration: 2000})
     return
   }
   
@@ -1041,9 +1261,11 @@ const startCompare = async () => {
   }
   
   comparing.value = true
+  const compareStatuses = [...selectedCompareScopes.value]
   
   try {
     console.log('开始分批对比，总数据量:', validCustomers.length)
+    console.log('对比范围:', compareStatuses)
     console.log('前3条电话号码示例:', validCustomers.slice(0, 3).map(c => ({原始: c.phone, 格式化后: c.phone})))
     
     // 只发送必要的字段，减少请求体大小
@@ -1052,16 +1274,18 @@ const startCompare = async () => {
       phone: c.phone, // 已经格式化过的电话号码
       email: c.email || '',
       company: c.company || '',
-      status: c.status || '数据'
+      status: normalizeImportStatus(c.status || defaultImportStatus.value)
     }))
     
     // 如果数据量小于5万条，直接一次性对比
     if (customerDataToSend.length <= 50000) {
       console.log('数据量较小，直接对比')
-      const response = await customerDataCompareAPI.batchCheck(customerDataToSend)
+      const response = await customerDataCompareAPI.batchCheck(customerDataToSend, compareStatuses)
       
       if (response && response.success) {
+        normalizeCompareResultStatuses(response.data.results)
         compareResults.value = response.data
+        compareResults.value.compareStatuses = compareStatuses
         showInputData.value = false
         currentPage.value = 1
         ElMessage.success({message: `对比完成：发现 ${response.data.summary.duplicate} 条重复，${response.data.summary.unique} 条新客户`, duration: 3000})
@@ -1101,7 +1325,7 @@ const startCompare = async () => {
         
         console.log(`对比第 ${batchNum}/${totalBatches} 批，${batch.length} 条数据`)
         
-        const response = await customerDataCompareAPI.batchCheck(batch)
+        const response = await customerDataCompareAPI.batchCheck(batch, compareStatuses)
         
         if (response && response.success) {
           // 合并结果
@@ -1151,14 +1375,18 @@ const startCompare = async () => {
       totalRecords: 0
     }
     
+    normalizeCompareResultStatuses(allResults)
+    
     // 合并所有结果
     compareResults.value = {
       results: allResults,
+      compareStatuses,
       summary: {
         total: allResults.length,
         duplicate: totalDuplicate,
         unique: totalUnique,
         duplicateRate: allResults.length > 0 ? ((totalDuplicate / allResults.length) * 100).toFixed(2) + '%' : '0%',
+        compareStatuses,
         duration: '分批处理',
         comparisonMethod: 'batch_compare'
       }
@@ -1240,12 +1468,17 @@ const saveNewCustomersToDatabase = async () => {
         email: customer.email || originalCustomer?.email || '', // 可以为空
         company: customer.company || originalCustomer?.company || '', // 可以为空
         address: originalCustomer?.address || '', // 可以为空
-        status: customer.status || originalCustomer?.status || '数据', // 客户状态
+        status: normalizeImportStatus(customer.status || originalCustomer?.status || defaultImportStatus.value),
         notes: originalCustomer?.notes || '' // 可以为空
       })
     }
     
+    const compareStatuses = compareResults.value.compareStatuses
+      || compareResults.value.summary?.compareStatuses
+      || [...selectedCompareScopes.value]
+    
     console.log('准备保存客户数据:', customersToSave.length, '条')
+    console.log('保存时对比范围:', compareStatuses)
     
     // 分批上传，每批5万条，避免一次性发送导致卡死
     const batchSize = 50000
@@ -1278,7 +1511,7 @@ const saveNewCustomersToDatabase = async () => {
         
         console.log(`上传第 ${batchNum}/${totalBatches} 批，${batch.length} 条数据`)
         
-        const response = await customerDataCompareAPI.saveNewCustomers(batch)
+        const response = await customerDataCompareAPI.saveNewCustomers(batch, compareStatuses)
         
         if (response && response.success) {
           const { success, failed, duplicate, invalid, errors } = response.data

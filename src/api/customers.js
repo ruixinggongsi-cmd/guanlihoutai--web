@@ -32,6 +32,11 @@ export const customerAPI = {
     return request.post('/customers/batch-delete', { ids })
   },
 
+  // 超级管理员：删除全部客户数据
+  deleteAllCustomers(statuses = null) {
+    return request.post('/customers/delete-all', { statuses })
+  },
+
   // 更新客户状态
   updateCustomerStatus(id, status) {
     return request.put(`/customers/${id}`, { status })
