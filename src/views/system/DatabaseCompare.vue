@@ -277,6 +277,9 @@
               </h3>
               <p v-if="listDataMode === 'uploaderSummary' || listDataMode === 'uploaderDetail'" class="text-sm text-gray-400 mt-1">
                 统计范围：{{ uploaderDateScopeLabel }}
+                <span v-if="listDataMode === 'uploaderDetail' && uploaderDetailStatusLabel">
+                  · 数据状态：{{ uploaderDetailStatusLabel }}
+                </span>
                 <span v-if="listDataMode === 'uploaderSummary'">
                   · 按对比上传时写入的「上传人 + 上传时间」汇总
                 </span>
@@ -330,44 +333,14 @@
               </button>
             </div>
 
-            <!-- 上传人明细：返回 + 日期 + 状态分类 -->
-            <div v-else-if="listDataMode === 'uploaderDetail'" class="flex flex-wrap items-center gap-2">
+            <!-- 上传人明细：返回 -->
+            <div v-else-if="listDataMode === 'uploaderDetail'" class="flex flex-wrap items-center gap-2 shrink-0">
               <button
                 @click="backToUploaderSummary"
                 class="inline-flex items-center justify-center h-10 px-4 bg-white/5 border border-white/20 rounded-lg text-white hover:bg-white/10 transition-all text-sm"
               >
                 <i class="fas fa-arrow-left mr-1"></i>返回统计
               </button>
-              <select
-                v-model="uploaderDateScope"
-                @change="onUploaderDateScopeChange"
-                class="h-10 px-3 bg-white/5 border border-white/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              >
-                <option v-for="opt in uploaderDateScopeOptions" :key="opt.value" :value="opt.value" class="bg-slate-800">
-                  {{ opt.label }}
-                </option>
-              </select>
-              <div class="flex flex-wrap items-center gap-1">
-                <button
-                  v-for="tab in uploaderDetailStatusTabs"
-                  :key="tab.value"
-                  @click="setUploaderDetailStatus(tab.value)"
-                  :class="uploaderDetailStatus === tab.value ? tab.activeClass : 'bg-white/5 text-gray-400 border-white/20'"
-                  class="inline-flex items-center justify-center h-10 px-3 rounded-lg border text-sm transition-all"
-                >
-                  {{ tab.label }}
-                  <span v-if="tab.count !== null" class="ml-1 opacity-80">({{ tab.count }})</span>
-                </button>
-              </div>
-              <select
-                v-model="pageSize"
-                @change="currentPage = 1; loadDatabaseList()"
-                class="h-10 px-3 bg-white/5 border border-white/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              >
-                <option :value="50" class="bg-slate-800">每页 50 条</option>
-                <option :value="100" class="bg-slate-800">每页 100 条</option>
-                <option :value="500" class="bg-slate-800">每页 500 条</option>
-              </select>
             </div>
 
             <!-- 上传数据工具栏 -->
@@ -447,31 +420,12 @@
                 placeholder="搜索姓名/电话/邮箱/公司"
                 class="h-10 px-3 bg-white/5 border border-white/20 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary w-56"
               >
-              <select
-                v-model="databaseStatusFilter"
-                @change="loadDatabaseList"
-                class="h-10 px-3 bg-white/5 border border-white/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              >
-                <option value="" class="bg-slate-800">全部状态</option>
-                <option value="active" class="bg-slate-800">数据</option>
-                <option value="inactive" class="bg-slate-800">意向客户</option>
-                <option value="vip" class="bg-slate-800">进群客户</option>
-              </select>
               <button
                 @click="loadDatabaseList"
                 class="inline-flex items-center justify-center h-10 px-4 bg-white/5 border border-white/20 rounded-lg text-white hover:bg-white/10 transition-all text-sm"
               >
                 <i class="fas fa-search mr-1"></i>搜索
               </button>
-              <select
-                v-model="pageSize"
-                @change="currentPage = 1; loadDatabaseList()"
-                class="h-10 px-3 bg-white/5 border border-white/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              >
-                <option :value="50" class="bg-slate-800">每页 50 条</option>
-                <option :value="100" class="bg-slate-800">每页 100 条</option>
-                <option :value="500" class="bg-slate-800">每页 500 条</option>
-              </select>
             </div>
           </div>
 
@@ -514,12 +468,92 @@
               <span v-if="compareResults" class="ml-1 text-xs">({{ compareResults.summary?.duplicate || 0 }}重复 / {{ compareResults.summary?.unique || 0 }}新增)</span>
             </button>
           </div>
+
+          <!-- 筛选栏：上传人明细 / 数据库全部 -->
+          <div
+            v-if="listDataMode === 'uploaderDetail' || listDataMode === 'database'"
+            class="mb-4 rounded-xl border border-white/15 bg-white/[0.03] p-4"
+          >
+            <div class="flex flex-wrap items-start gap-x-8 gap-y-4">
+              <div class="flex items-start gap-3">
+                <span class="text-sm font-medium text-gray-300 pt-2 whitespace-nowrap w-20 shrink-0">时间范围</span>
+                <select
+                  v-if="listDataMode === 'uploaderDetail'"
+                  v-model="uploaderDateScope"
+                  @change="onUploaderDateScopeChange"
+                  class="h-10 px-3 bg-white/5 border border-white/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary min-w-[7rem]"
+                >
+                  <option v-for="opt in uploaderDateScopeOptions" :key="opt.value" :value="opt.value" class="bg-slate-800">
+                    {{ opt.label }}
+                  </option>
+                </select>
+                <select
+                  v-else
+                  v-model="databaseDateScope"
+                  @change="onDatabaseDateScopeChange"
+                  class="h-10 px-3 bg-white/5 border border-white/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary min-w-[7rem]"
+                >
+                  <option v-for="opt in uploaderDateScopeOptions" :key="opt.value" :value="opt.value" class="bg-slate-800">
+                    {{ opt.label }}
+                  </option>
+                </select>
+              </div>
+
+              <div class="flex items-start gap-3 flex-1 min-w-[280px]">
+                <span class="text-sm font-medium text-gray-300 pt-2 whitespace-nowrap w-20 shrink-0">数据状态</span>
+                <div class="flex flex-wrap items-center gap-2">
+                  <template v-if="listDataMode === 'uploaderDetail'">
+                    <button
+                      v-for="tab in uploaderDetailStatusTabs"
+                      :key="tab.value"
+                      @click="setUploaderDetailStatus(tab.value)"
+                      :disabled="uploaderDetailCountsLoading"
+                      :class="uploaderDetailStatus === tab.value ? tab.activeClass : 'bg-white/5 text-gray-400 border-white/20'"
+                      class="inline-flex items-center justify-center h-10 px-3 rounded-lg border text-sm transition-all disabled:opacity-60"
+                    >
+                      {{ tab.label }}
+                      <span v-if="tab.count !== null" class="ml-1 opacity-80 tabular-nums">({{ tab.count }})</span>
+                    </button>
+                  </template>
+                  <template v-else>
+                    <button
+                      v-for="tab in databaseStatusTabs"
+                      :key="tab.value"
+                      @click="setDatabaseStatusFilter(tab.value)"
+                      :class="databaseStatusFilter === tab.value ? tab.activeClass : 'bg-white/5 text-gray-400 border-white/20'"
+                      class="inline-flex items-center justify-center h-10 px-3 rounded-lg border text-sm transition-all"
+                    >
+                      {{ tab.label }}
+                    </button>
+                  </template>
+                </div>
+              </div>
+
+              <div class="flex flex-wrap items-center gap-3 ml-auto">
+                <span class="text-sm text-gray-400 whitespace-nowrap">
+                  匹配 <span class="text-white font-semibold tabular-nums">{{ databaseTotal }}</span> 条
+                </span>
+                <select
+                  v-model="pageSize"
+                  @change="currentPage = 1; loadDatabaseList()"
+                  class="h-10 px-3 bg-white/5 border border-white/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  <option :value="50" class="bg-slate-800">每页 50 条</option>
+                  <option :value="100" class="bg-slate-800">每页 100 条</option>
+                  <option :value="500" class="bg-slate-800">每页 500 条</option>
+                </select>
+              </div>
+            </div>
+          </div>
           
           <!-- 按上传人统计表格 -->
           <div v-if="listDataMode === 'uploaderSummary'" class="overflow-x-auto">
             <div v-if="uploaderSummaryLoading" class="py-12 text-center text-gray-400">
               <i class="fas fa-spinner fa-spin text-2xl mb-2"></i>
               <p>加载中...</p>
+              <p v-if="uploaderDateScope === 'all'" class="text-xs text-gray-500 mt-2">
+                全量统计约 54 万条，可能需要 5–15 秒
+              </p>
             </div>
             <table v-else class="w-full table-fixed border-collapse">
               <colgroup>
@@ -950,7 +984,7 @@ const backfillUserId = ref('')
 const backfillUserOptions = ref([])
 const backfillLoading = ref(false)
 const uploadSessions = ref([])
-const uploaderDateScope = ref('today')
+const uploaderDateScope = ref('last7')
 const uploaderDateScopeOptions = [
   { value: 'today', label: '今天' },
   { value: 'yesterday', label: '昨天' },
@@ -965,6 +999,8 @@ const databaseListLoading = ref(false)
 const databaseTotal = ref(0)
 const databaseKeyword = ref('')
 const databaseStatusFilter = ref('')
+const databaseDateScope = ref('all')
+const uploaderDetailCountsLoading = ref(false)
 
 const compareScopeOptions = [
   { label: '数据', value: 'active', countClass: 'text-blue-400', selectedClass: 'bg-blue-500/20 border-blue-500/50 text-blue-300' },
@@ -1034,13 +1070,14 @@ const loadUploaderSummary = async () => {
         missingCount: 0,
         uploaderCount: (response.data || []).length
       }
-      await loadUploadSessions()
+      loadUploadSessions()
     } else {
-      ElMessage.error({ message: response.message || '获取上传人统计失败', duration: 2000 })
+      ElMessage.error({ message: response.message || '获取上传人统计失败', duration: 3000 })
     }
   } catch (error) {
     console.error('获取上传人统计失败:', error)
-    ElMessage.error({ message: '获取上传人统计失败', duration: 2000 })
+    const msg = error?.response?.data?.message || error?.response?.data?.error || error?.message || '获取上传人统计失败'
+    ElMessage.error({ message: msg, duration: 4000 })
   } finally {
     uploaderSummaryLoading.value = false
   }
@@ -1050,8 +1087,14 @@ const uploaderDateScopeLabel = computed(() => {
   return uploaderDateScopeOptions.find(opt => opt.value === uploaderDateScope.value)?.label || '今天'
 })
 
+const uploaderDetailStatusLabel = computed(() => {
+  const map = { '': '', active: '数据', inactive: '意向客户', vip: '进群客户' }
+  return map[uploaderDetailStatus.value] || ''
+})
+
 const refreshSelectedUploaderCounts = async () => {
   if (!selectedUploader.value) return
+  uploaderDetailCountsLoading.value = true
   try {
     const response = await customerDataCompareAPI.getUploaderSummary({
       dateScope: uploaderDateScope.value
@@ -1063,10 +1106,20 @@ const refreshSelectedUploaderCounts = async () => {
       )
       if (updated) {
         selectedUploader.value = updated
+      } else {
+        selectedUploader.value = {
+          ...selectedUploader.value,
+          total_count: 0,
+          active_count: 0,
+          inactive_count: 0,
+          vip_count: 0
+        }
       }
     }
   } catch (error) {
     console.error('刷新上传人统计失败:', error)
+  } finally {
+    uploaderDetailCountsLoading.value = false
   }
 }
 
@@ -1148,11 +1201,12 @@ const runBackfillCreatedBy = async () => {
   }
 }
 
-const viewUploaderDetail = (row, status = '') => {
+const viewUploaderDetail = async (row, status = '') => {
   selectedUploader.value = row
   uploaderDetailStatus.value = status
   listDataMode.value = 'uploaderDetail'
   currentPage.value = 1
+  await refreshSelectedUploaderCounts()
   loadDatabaseList()
 }
 
@@ -1165,6 +1219,17 @@ const backToUploaderSummary = () => {
 
 const setUploaderDetailStatus = (status) => {
   uploaderDetailStatus.value = status
+  currentPage.value = 1
+  loadDatabaseList()
+}
+
+const setDatabaseStatusFilter = (status) => {
+  databaseStatusFilter.value = status
+  currentPage.value = 1
+  loadDatabaseList()
+}
+
+const onDatabaseDateScopeChange = () => {
   currentPage.value = 1
   loadDatabaseList()
 }
@@ -1187,6 +1252,9 @@ const loadDatabaseList = async () => {
     } else if (listDataMode.value === 'database') {
       if (databaseStatusFilter.value) {
         params.status = databaseStatusFilter.value
+      }
+      if (databaseDateScope.value) {
+        params.dateScope = databaseDateScope.value
       }
     }
 
@@ -1215,6 +1283,13 @@ const uploaderDetailStatusTabs = computed(() => {
     { label: '进群客户', value: 'vip', count: row.vip_count, activeClass: 'bg-green-500/30 text-green-300 border-green-500/50' }
   ]
 })
+
+const databaseStatusTabs = [
+  { label: '全部', value: '', activeClass: 'bg-purple-500/30 text-purple-300 border-purple-500/50' },
+  { label: '数据', value: 'active', activeClass: 'bg-blue-500/30 text-blue-300 border-blue-500/50' },
+  { label: '意向客户', value: 'inactive', activeClass: 'bg-yellow-500/30 text-yellow-300 border-yellow-500/50' },
+  { label: '进群客户', value: 'vip', activeClass: 'bg-green-500/30 text-green-300 border-green-500/50' }
+]
 
 const activeTotalPages = computed(() => {
   if (listDataMode.value === 'upload') return totalPages.value
