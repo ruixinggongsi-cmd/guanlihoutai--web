@@ -14,6 +14,26 @@ export const customerDataCompareAPI = {
   getDatabaseStats() {
     return request.get('/customer-data-compare/database-stats')
   },
+
+  getDatabaseList(params = {}) {
+    return request.get('/customer-data-compare/database-list', params)
+  },
+
+  getUploaderSummary(params = {}) {
+    return request.get('/customer-data-compare/uploader-summary', params)
+  },
+
+  backfillCreatedBy(data) {
+    return request.post('/customer-data-compare/backfill-created-by', data)
+  },
+
+  recordUploadSession(data) {
+    return request.post('/customer-data-compare/upload-sessions', data)
+  },
+
+  getUploadSessions(params = {}) {
+    return request.get('/customer-data-compare/upload-sessions', params)
+  },
   
   // 批量保存新增客户数据到数据库
   saveNewCustomers(customerList, compareStatuses = null) {

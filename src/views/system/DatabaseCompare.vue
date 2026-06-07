@@ -263,103 +263,428 @@
           </div>
         </div>
 
-        <!-- 数据列表 / 对比结果切换 -->
+        <!-- 数据列表 / 对比结果 / 按上传人统计 -->
         <div class="mb-6">
-          <div class="flex justify-between items-center mb-4">
-            <div class="flex items-center space-x-4">
+          <!-- 标题行 + 右侧工具栏 -->
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+            <div>
               <h3 class="text-lg font-semibold text-white">
-                <span v-if="!compareResults">数据列表</span>
-                <span v-else>对比结果</span>
+                <span v-if="listDataMode === 'uploaderSummary'">按上传人统计</span>
+                <span v-else-if="listDataMode === 'uploaderDetail'">{{ selectedUploader?.uploader_name }} 的上传明细</span>
+                <span v-else-if="listDataMode === 'database'">数据库全部数据</span>
+                <span v-else-if="listDataMode === 'compare'">对比结果</span>
+                <span v-else>上传数据</span>
               </h3>
-              <div class="flex items-center space-x-2">
-                <button 
-                  @click="showInputData = true"
-                  :class="showInputData ? 'bg-blue-500/30 text-blue-400' : 'bg-white/5 text-gray-400'"
-                  class="px-4 py-2 rounded-lg border border-white/20 hover:bg-white/10 transition-all duration-300 text-sm"
+              <p v-if="listDataMode === 'uploaderSummary' || listDataMode === 'uploaderDetail'" class="text-sm text-gray-400 mt-1">
+                统计范围：{{ uploaderDateScopeLabel }}
+                <span v-if="listDataMode === 'uploaderSummary'">
+                  · 按对比上传时写入的「上传人 + 上传时间」汇总
+                </span>
+              </p>
+              <div
+                v-if="listDataMode === 'uploaderSummary' && uploaderSummaryMeta.missingCount > 0"
+                class="mt-2 flex flex-wrap items-center gap-2 text-sm"
+              >
+                <span class="text-yellow-300">
+                  <i class="fas fa-exclamation-triangle mr-1"></i>
+                  有 {{ uploaderSummaryMeta.missingCount }} 条数据缺少上传人记录（历史导入未写入）
+                </span>
+                <select
+                  v-model="backfillUserId"
+                  class="h-9 px-3 bg-white/5 border border-white/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 >
-                  <i class="fas fa-table mr-2"></i>
-                  数据列表
-                </button>
-                <button 
-                  @click="showInputData = false"
-                  :disabled="!compareResults"
-                  :class="!showInputData && compareResults ? 'bg-green-500/30 text-green-400' : 'bg-white/5 text-gray-400'"
-                  class="px-4 py-2 rounded-lg border border-white/20 hover:bg-white/10 transition-all duration-300 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  <option value="" class="bg-slate-800">选择上传人</option>
+                  <option v-for="user in backfillUserOptions" :key="user.id" :value="user.id" class="bg-slate-800">
+                    {{ user.name || user.username }}
+                  </option>
+                </select>
+                <button
+                  @click="runBackfillCreatedBy"
+                  :disabled="!backfillUserId || backfillLoading"
+                  class="inline-flex items-center justify-center h-9 px-3 bg-yellow-500/20 text-yellow-300 border border-yellow-500/40 rounded-lg hover:bg-yellow-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <i class="fas fa-check-circle mr-2"></i>
-                  对比结果
-                  <span v-if="compareResults" class="ml-2 text-xs">({{ compareResults.summary?.duplicate || 0 }}重复 / {{ compareResults.summary?.unique || 0 }}新增)</span>
+                  <i class="fas fa-user-check mr-1" v-if="!backfillLoading"></i>
+                  <i class="fas fa-spinner fa-spin mr-1" v-else></i>
+                  补全当前范围内缺失的上传人
                 </button>
               </div>
             </div>
-            <div v-if="showInputData" class="flex items-center space-x-3">
+
+            <!-- 按上传人统计：日期筛选 -->
+            <div v-if="listDataMode === 'uploaderSummary'" class="flex flex-wrap items-center gap-2 shrink-0">
+              <select
+                v-model="uploaderDateScope"
+                @change="loadUploaderSummary"
+                class="h-10 px-3 bg-white/5 border border-white/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option v-for="opt in uploaderDateScopeOptions" :key="opt.value" :value="opt.value" class="bg-slate-800">
+                  {{ opt.label }}
+                </option>
+              </select>
+              <span class="text-sm text-gray-400 whitespace-nowrap">共 {{ uploaderSummary.length }} 人</span>
+              <button
+                @click="loadUploaderSummary"
+                class="inline-flex items-center justify-center h-10 px-4 bg-white/5 border border-white/20 rounded-lg text-white hover:bg-white/10 transition-all text-sm"
+              >
+                <i class="fas fa-sync-alt mr-1"></i>刷新
+              </button>
+            </div>
+
+            <!-- 上传人明细：返回 + 日期 + 状态分类 -->
+            <div v-else-if="listDataMode === 'uploaderDetail'" class="flex flex-wrap items-center gap-2">
+              <button
+                @click="backToUploaderSummary"
+                class="inline-flex items-center justify-center h-10 px-4 bg-white/5 border border-white/20 rounded-lg text-white hover:bg-white/10 transition-all text-sm"
+              >
+                <i class="fas fa-arrow-left mr-1"></i>返回统计
+              </button>
+              <select
+                v-model="uploaderDateScope"
+                @change="onUploaderDateScopeChange"
+                class="h-10 px-3 bg-white/5 border border-white/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option v-for="opt in uploaderDateScopeOptions" :key="opt.value" :value="opt.value" class="bg-slate-800">
+                  {{ opt.label }}
+                </option>
+              </select>
+              <div class="flex flex-wrap items-center gap-1">
+                <button
+                  v-for="tab in uploaderDetailStatusTabs"
+                  :key="tab.value"
+                  @click="setUploaderDetailStatus(tab.value)"
+                  :class="uploaderDetailStatus === tab.value ? tab.activeClass : 'bg-white/5 text-gray-400 border-white/20'"
+                  class="inline-flex items-center justify-center h-10 px-3 rounded-lg border text-sm transition-all"
+                >
+                  {{ tab.label }}
+                  <span v-if="tab.count !== null" class="ml-1 opacity-80">({{ tab.count }})</span>
+                </button>
+              </div>
+              <select
+                v-model="pageSize"
+                @change="currentPage = 1; loadDatabaseList()"
+                class="h-10 px-3 bg-white/5 border border-white/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option :value="50" class="bg-slate-800">每页 50 条</option>
+                <option :value="100" class="bg-slate-800">每页 100 条</option>
+                <option :value="500" class="bg-slate-800">每页 500 条</option>
+              </select>
+            </div>
+
+            <!-- 上传数据工具栏 -->
+            <div v-else-if="listDataMode === 'upload'" class="flex flex-wrap items-center gap-2">
               <span class="text-sm text-gray-400">共 {{ customerList.length }} 条</span>
-              <select 
+              <select
                 v-model="pageSize"
                 @change="currentPage = 1"
-                class="px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                class="h-10 px-3 bg-white/5 border border-white/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               >
                 <option :value="50" class="bg-slate-800">每页 50 条</option>
                 <option :value="100" class="bg-slate-800">每页 100 条</option>
                 <option :value="500" class="bg-slate-800">每页 500 条</option>
                 <option :value="1000" class="bg-slate-800">每页 1000 条</option>
               </select>
-              <button 
+              <button
                 @click="addNewRow"
-                class="px-4 py-2 bg-green-500/20 text-green-400 border border-green-500/50 rounded-lg hover:bg-green-500/30 transition-all duration-300 flex items-center space-x-2"
+                class="inline-flex items-center justify-center h-10 px-4 bg-green-500/20 text-green-400 border border-green-500/50 rounded-lg hover:bg-green-500/30 transition-all duration-300 gap-2"
               >
                 <i class="fas fa-plus"></i>
                 <span>添加行</span>
               </button>
             </div>
-            <div v-else-if="compareResults" class="flex items-center space-x-2">
-              <span class="px-3 py-1 bg-red-500/20 text-red-400 rounded-full text-sm">
+
+            <!-- 对比结果工具栏 -->
+            <div v-else-if="listDataMode === 'compare' && compareResults" class="flex flex-wrap items-center gap-2">
+              <span class="inline-flex items-center h-10 px-3 bg-red-500/20 text-red-400 rounded-lg text-sm">
                 重复: {{ compareResults.summary?.duplicate || 0 }}
               </span>
-              <span class="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm">
+              <span class="inline-flex items-center h-10 px-3 bg-green-500/20 text-green-400 rounded-lg text-sm">
                 新增: {{ compareResults.summary?.unique || 0 }}
               </span>
-              <span class="px-3 py-1 bg-blue-500/20 text-blue-400 rounded-full text-sm">
+              <span class="inline-flex items-center h-10 px-3 bg-blue-500/20 text-blue-400 rounded-lg text-sm">
                 重复率: {{ compareResults.summary?.duplicateRate || '0%' }}
               </span>
-              <button 
+              <button
                 @click="downloadNewCustomers"
                 :disabled="!compareResults || compareResults.summary?.unique === 0"
-                class="px-4 py-2 bg-green-500/20 text-green-400 border border-green-500/50 rounded-lg hover:bg-green-500/30 transition-all duration-300 flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                class="inline-flex items-center justify-center h-10 px-4 bg-green-500/20 text-green-400 border border-green-500/50 rounded-lg hover:bg-green-500/30 transition-all duration-300 gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <i class="fas fa-download"></i>
                 <span>下载新增数据</span>
               </button>
-              <button 
+              <button
                 @click="downloadDuplicates"
                 :disabled="!compareResults || compareResults.summary?.duplicate === 0"
-                class="px-4 py-2 bg-red-500/20 text-red-400 border border-red-500/50 rounded-lg hover:bg-red-500/30 transition-all duration-300 flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                class="inline-flex items-center justify-center h-10 px-4 bg-red-500/20 text-red-400 border border-red-500/50 rounded-lg hover:bg-red-500/30 transition-all duration-300 gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <i class="fas fa-download"></i>
                 <span>下载重复数据</span>
               </button>
-              <button 
+              <button
                 @click="downloadAllResults"
                 :disabled="!compareResults"
-                class="px-4 py-2 bg-blue-500/20 text-blue-400 border border-blue-500/50 rounded-lg hover:bg-blue-500/30 transition-all duration-300 flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                class="inline-flex items-center justify-center h-10 px-4 bg-blue-500/20 text-blue-400 border border-blue-500/50 rounded-lg hover:bg-blue-500/30 transition-all duration-300 gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <i class="fas fa-download"></i>
                 <span>下载全部结果</span>
               </button>
-              <button 
+              <button
                 @click="saveNewCustomersToDatabase"
                 :disabled="!compareResults || !compareResults.summary || Number(compareResults.summary?.unique || 0) === 0 || saving"
-                class="px-4 py-2 bg-purple-500/20 text-purple-400 border border-purple-500/50 rounded-lg hover:bg-purple-500/30 transition-all duration-300 flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                class="inline-flex items-center justify-center h-10 px-4 bg-purple-500/20 text-purple-400 border border-purple-500/50 rounded-lg hover:bg-purple-500/30 transition-all duration-300 gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <i class="fas fa-upload" v-if="!saving"></i>
                 <i class="fas fa-spinner fa-spin" v-else></i>
                 <span>{{ saving ? '上传中...' : '上传新增数据到数据库' }}</span>
               </button>
             </div>
+
+            <!-- 数据库全部数据工具栏 -->
+            <div v-else-if="listDataMode === 'database'" class="flex flex-wrap items-center gap-2">
+              <input
+                v-model="databaseKeyword"
+                @keyup.enter="loadDatabaseList"
+                type="text"
+                placeholder="搜索姓名/电话/邮箱/公司"
+                class="h-10 px-3 bg-white/5 border border-white/20 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary w-56"
+              >
+              <select
+                v-model="databaseStatusFilter"
+                @change="loadDatabaseList"
+                class="h-10 px-3 bg-white/5 border border-white/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="" class="bg-slate-800">全部状态</option>
+                <option value="active" class="bg-slate-800">数据</option>
+                <option value="inactive" class="bg-slate-800">意向客户</option>
+                <option value="vip" class="bg-slate-800">进群客户</option>
+              </select>
+              <button
+                @click="loadDatabaseList"
+                class="inline-flex items-center justify-center h-10 px-4 bg-white/5 border border-white/20 rounded-lg text-white hover:bg-white/10 transition-all text-sm"
+              >
+                <i class="fas fa-search mr-1"></i>搜索
+              </button>
+              <select
+                v-model="pageSize"
+                @change="currentPage = 1; loadDatabaseList()"
+                class="h-10 px-3 bg-white/5 border border-white/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option :value="50" class="bg-slate-800">每页 50 条</option>
+                <option :value="100" class="bg-slate-800">每页 100 条</option>
+                <option :value="500" class="bg-slate-800">每页 500 条</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- 导航 Tab 行（独立一行，统一高度对齐） -->
+          <div class="flex flex-wrap items-center gap-2 pb-4 mb-4 border-b border-white/10">
+            <template v-if="isSuperAdmin">
+              <button
+                @click="switchListMode('uploaderSummary')"
+                :class="listDataMode === 'uploaderSummary' || listDataMode === 'uploaderDetail' ? 'bg-purple-500/30 text-purple-300 border-purple-500/50' : 'bg-white/5 text-gray-400 border-white/20'"
+                class="inline-flex items-center justify-center h-10 px-4 rounded-lg border hover:bg-white/10 transition-all duration-300 text-sm whitespace-nowrap"
+              >
+                <i class="fas fa-users mr-2"></i>
+                按上传人
+              </button>
+              <button
+                @click="switchListMode('database')"
+                :class="listDataMode === 'database' ? 'bg-indigo-500/30 text-indigo-300 border-indigo-500/50' : 'bg-white/5 text-gray-400 border-white/20'"
+                class="inline-flex items-center justify-center h-10 px-4 rounded-lg border hover:bg-white/10 transition-all duration-300 text-sm whitespace-nowrap"
+              >
+                <i class="fas fa-database mr-2"></i>
+                数据库全部数据 ({{ databaseStats.totalCustomers || 0 }})
+              </button>
+            </template>
+            <button
+              @click="switchListMode('upload')"
+              :class="listDataMode === 'upload' ? 'bg-blue-500/30 text-blue-400 border-blue-500/50' : 'bg-white/5 text-gray-400 border-white/20'"
+              class="inline-flex items-center justify-center h-10 px-4 rounded-lg border hover:bg-white/10 transition-all duration-300 text-sm whitespace-nowrap"
+            >
+              <i class="fas fa-table mr-2"></i>
+              上传数据
+            </button>
+            <button
+              @click="switchListMode('compare')"
+              :disabled="!compareResults"
+              :class="listDataMode === 'compare' && compareResults ? 'bg-green-500/30 text-green-400 border-green-500/50' : 'bg-white/5 text-gray-400 border-white/20'"
+              class="inline-flex items-center justify-center h-10 px-4 rounded-lg border hover:bg-white/10 transition-all duration-300 text-sm whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <i class="fas fa-check-circle mr-2"></i>
+              对比结果
+              <span v-if="compareResults" class="ml-1 text-xs">({{ compareResults.summary?.duplicate || 0 }}重复 / {{ compareResults.summary?.unique || 0 }}新增)</span>
+            </button>
           </div>
           
+          <!-- 按上传人统计表格 -->
+          <div v-if="listDataMode === 'uploaderSummary'" class="overflow-x-auto">
+            <div v-if="uploaderSummaryLoading" class="py-12 text-center text-gray-400">
+              <i class="fas fa-spinner fa-spin text-2xl mb-2"></i>
+              <p>加载中...</p>
+            </div>
+            <table v-else class="w-full table-fixed border-collapse">
+              <colgroup>
+                <col style="width: 180px">
+                <col style="width: 100px">
+                <col style="width: 100px">
+                <col style="width: 110px">
+                <col style="width: 110px">
+                <col style="width: 100px">
+              </colgroup>
+              <thead class="bg-white/5 border-b border-white/20">
+                <tr>
+                  <th class="px-4 py-3 text-left text-sm font-semibold text-gray-300 align-middle">上传人</th>
+                  <th class="px-4 py-3 text-left text-sm font-semibold text-gray-300 align-middle">合计</th>
+                  <th class="px-4 py-3 text-left text-sm font-semibold text-gray-300 align-middle">数据</th>
+                  <th class="px-4 py-3 text-left text-sm font-semibold text-gray-300 align-middle">意向客户</th>
+                  <th class="px-4 py-3 text-left text-sm font-semibold text-gray-300 align-middle">进群客户</th>
+                  <th class="px-4 py-3 text-left text-sm font-semibold text-gray-300 align-middle">操作</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-white/10">
+                <tr
+                  v-for="row in uploaderSummary"
+                  :key="row.uploader_id || '__unknown__'"
+                  class="hover:bg-white/5 transition-colors"
+                >
+                  <td class="px-4 py-3 text-left align-middle text-white font-medium whitespace-nowrap">
+                    {{ row.uploader_name }}
+                  </td>
+                  <td class="px-4 py-3 text-left align-middle">
+                    <button
+                      @click="viewUploaderDetail(row)"
+                      class="text-purple-400 hover:text-purple-300 font-bold underline-offset-2 hover:underline tabular-nums"
+                    >
+                      {{ row.total_count }}
+                    </button>
+                  </td>
+                  <td class="px-4 py-3 text-left align-middle tabular-nums">
+                    <button
+                      v-if="row.active_count > 0"
+                      @click="viewUploaderDetail(row, 'active')"
+                      class="text-blue-400 hover:text-blue-300 hover:underline"
+                    >
+                      {{ row.active_count }}
+                    </button>
+                    <span v-else class="text-gray-500">0</span>
+                  </td>
+                  <td class="px-4 py-3 text-left align-middle tabular-nums">
+                    <button
+                      v-if="row.inactive_count > 0"
+                      @click="viewUploaderDetail(row, 'inactive')"
+                      class="text-yellow-400 hover:text-yellow-300 hover:underline"
+                    >
+                      {{ row.inactive_count }}
+                    </button>
+                    <span v-else class="text-gray-500">0</span>
+                  </td>
+                  <td class="px-4 py-3 text-left align-middle tabular-nums">
+                    <button
+                      v-if="row.vip_count > 0"
+                      @click="viewUploaderDetail(row, 'vip')"
+                      class="text-green-400 hover:text-green-300 hover:underline"
+                    >
+                      {{ row.vip_count }}
+                    </button>
+                    <span v-else class="text-gray-500">0</span>
+                  </td>
+                  <td class="px-4 py-3 text-left align-middle">
+                    <button
+                      @click="viewUploaderDetail(row)"
+                      class="px-3 py-1 bg-purple-500/20 text-purple-400 rounded-lg hover:bg-purple-500/30 transition-colors text-sm"
+                    >
+                      查看
+                    </button>
+                  </td>
+                </tr>
+                <tr v-if="uploaderSummary.length === 0">
+                  <td colspan="6" class="px-4 py-8 text-center text-gray-400">
+                    <i class="fas fa-inbox text-4xl mb-2 opacity-50"></i>
+                    <p>暂无上传记录</p>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            <!-- 对比上传批次记录 -->
+            <div v-if="uploadSessions.length > 0" class="mt-6 pt-6 border-t border-white/10">
+              <h4 class="text-sm font-semibold text-gray-300 mb-3">
+                <i class="fas fa-history mr-2"></i>对比上传记录（谁在什么时候上传了多少）
+              </h4>
+              <div class="overflow-x-auto">
+                <table class="w-full table-fixed border-collapse">
+                  <thead class="bg-white/5 border-b border-white/20">
+                    <tr>
+                      <th class="px-4 py-2 text-left text-xs font-semibold text-gray-400">上传时间</th>
+                      <th class="px-4 py-2 text-left text-xs font-semibold text-gray-400">上传人</th>
+                      <th class="px-4 py-2 text-left text-xs font-semibold text-gray-400">文件名</th>
+                      <th class="px-4 py-2 text-left text-xs font-semibold text-gray-400">成功</th>
+                      <th class="px-4 py-2 text-left text-xs font-semibold text-gray-400">重复/失败</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-white/10">
+                    <tr v-for="session in uploadSessions" :key="session.id" class="hover:bg-white/5">
+                      <td class="px-4 py-2 text-sm text-gray-300">{{ formatDate(session.uploaded_at) }}</td>
+                      <td class="px-4 py-2 text-sm text-white">{{ session.uploader_name }}</td>
+                      <td class="px-4 py-2 text-sm text-gray-400 truncate">{{ session.file_name || '-' }}</td>
+                      <td class="px-4 py-2 text-sm text-green-400">{{ session.success_count || 0 }}</td>
+                      <td class="px-4 py-2 text-sm text-gray-400">
+                        重复 {{ session.duplicate_count || 0 }} / 失败 {{ session.failed_count || 0 }}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- 上传人明细 / 数据库列表 -->
+          <div v-else-if="listDataMode === 'uploaderDetail' || listDataMode === 'database'" class="overflow-x-auto">
+            <div v-if="databaseListLoading" class="py-12 text-center text-gray-400">
+              <i class="fas fa-spinner fa-spin text-2xl mb-2"></i>
+              <p>加载中...</p>
+            </div>
+            <table v-else class="w-full">
+              <thead class="bg-white/5 border-b border-white/20">
+                <tr>
+                  <th class="px-4 py-3 text-left text-sm font-semibold text-gray-300">姓名</th>
+                  <th class="px-4 py-3 text-left text-sm font-semibold text-gray-300">电话</th>
+                  <th class="px-4 py-3 text-left text-sm font-semibold text-gray-300">邮箱</th>
+                  <th class="px-4 py-3 text-left text-sm font-semibold text-gray-300">公司</th>
+                  <th class="px-4 py-3 text-left text-sm font-semibold text-gray-300">状态</th>
+                  <th v-if="listDataMode === 'database'" class="px-4 py-3 text-left text-sm font-semibold text-gray-300">上传人</th>
+                  <th class="px-4 py-3 text-left text-sm font-semibold text-gray-300">上传时间</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-white/10">
+                <tr
+                  v-for="item in databaseList"
+                  :key="item.id"
+                  class="hover:bg-white/5 transition-colors"
+                >
+                  <td class="px-4 py-3 text-white">{{ item.name || '-' }}</td>
+                  <td class="px-4 py-3 text-gray-300">{{ item.phone || '-' }}</td>
+                  <td class="px-4 py-3 text-gray-300">{{ item.email || '-' }}</td>
+                  <td class="px-4 py-3 text-gray-300">{{ item.company || '-' }}</td>
+                  <td class="px-4 py-3">
+                    <span :class="getCustomerStatusClass(item.status)" class="px-2 py-1 rounded text-xs">
+                      {{ getCustomerStatusText(item.status) }}
+                    </span>
+                  </td>
+                  <td v-if="listDataMode === 'database'" class="px-4 py-3 text-gray-300">{{ item.creator_name || '-' }}</td>
+                  <td class="px-4 py-3 text-gray-400 text-sm">{{ formatDate(item.created_at) }}</td>
+                </tr>
+                <tr v-if="databaseList.length === 0">
+                  <td :colspan="listDataMode === 'database' ? 7 : 6" class="px-4 py-8 text-center text-gray-400">
+                    <i class="fas fa-inbox text-4xl mb-2 opacity-50"></i>
+                    <p>暂无数据</p>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
           <!-- 数据输入表格 -->
-          <div v-if="showInputData" class="overflow-x-auto">
+          <div v-else-if="listDataMode === 'upload'" class="overflow-x-auto">
             <table class="w-full">
               <thead class="bg-white/5 border-b border-white/20">
                 <tr>
@@ -448,7 +773,7 @@
           </div>
           
           <!-- 对比结果表格 -->
-          <div v-else-if="compareResults" class="overflow-x-auto">
+          <div v-else-if="listDataMode === 'compare' && compareResults" class="overflow-x-auto">
             <table class="w-full">
               <thead class="bg-white/5 border-b border-white/20">
                 <tr>
@@ -553,19 +878,19 @@
           </div>
           
           <!-- 分页控件 -->
-          <div v-if="(showInputData && customerList.length > 0) || (!showInputData && compareResults && compareResults.results.length > 0)" class="flex justify-between items-center mt-4 pt-4 border-t border-white/20">
+          <div v-if="showListPagination" class="flex justify-between items-center mt-4 pt-4 border-t border-white/20">
             <div class="text-sm text-gray-400">
-              显示第 {{ (currentPage - 1) * pageSize + 1 }} - {{ Math.min(currentPage * pageSize, showInputData ? customerList.length : (compareResults?.results?.length || 0)) }} 条，共 {{ showInputData ? customerList.length : (compareResults?.results?.length || 0) }} 条
+              显示第 {{ paginationStart }} - {{ paginationEnd }} 条，共 {{ paginationTotal }} 条
             </div>
             <div class="flex items-center space-x-2">
-              <button 
+              <button
                 @click="currentPage = 1"
                 :disabled="currentPage === 1"
                 class="px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
               >
                 <i class="fas fa-angle-double-left"></i>
               </button>
-              <button 
+              <button
                 @click="currentPage--"
                 :disabled="currentPage === 1"
                 class="px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
@@ -573,18 +898,18 @@
                 <i class="fas fa-angle-left"></i>
               </button>
               <span class="px-4 py-2 text-white">
-                第 {{ currentPage }} / {{ showInputData ? totalPages : totalResultPages }} 页
+                第 {{ currentPage }} / {{ activeTotalPages }} 页
               </span>
-              <button 
+              <button
                 @click="currentPage++"
-                :disabled="currentPage >= (showInputData ? totalPages : totalResultPages)"
+                :disabled="currentPage >= activeTotalPages"
                 class="px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
               >
                 <i class="fas fa-angle-right"></i>
               </button>
-              <button 
-                @click="currentPage = (showInputData ? totalPages : totalResultPages)"
-                :disabled="currentPage >= (showInputData ? totalPages : totalResultPages)"
+              <button
+                @click="currentPage = activeTotalPages"
+                :disabled="currentPage >= activeTotalPages"
                 class="px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
               >
                 <i class="fas fa-angle-double-right"></i>
@@ -602,6 +927,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import NavigationBar from '../../components/NavigationBar.vue'
 import { customerDataCompareAPI } from '../../api/customerDataCompare.js'
 import { customerAPI } from '../../api/customers.js'
+import { userAPI } from '../../api/users.js'
 import { permissionUtils } from '../../utils/permission.js'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as XLSX from 'xlsx'
@@ -615,7 +941,30 @@ const saving = ref(false)
 const uploadedFileName = ref('')
 const currentPage = ref(1)
 const pageSize = ref(100)
-const showInputData = ref(true) // 控制显示数据输入还是对比结果
+const listDataMode = ref('upload') // upload | compare | uploaderSummary | uploaderDetail | database
+
+const uploaderSummary = ref([])
+const uploaderSummaryMeta = ref({ totalRecords: 0, trackedCount: 0, missingCount: 0, uploaderCount: 0 })
+const uploaderSummaryLoading = ref(false)
+const backfillUserId = ref('')
+const backfillUserOptions = ref([])
+const backfillLoading = ref(false)
+const uploadSessions = ref([])
+const uploaderDateScope = ref('today')
+const uploaderDateScopeOptions = [
+  { value: 'today', label: '今天' },
+  { value: 'yesterday', label: '昨天' },
+  { value: 'day_before', label: '前天' },
+  { value: 'last7', label: '近7天' },
+  { value: 'all', label: '全部' }
+]
+const selectedUploader = ref(null)
+const uploaderDetailStatus = ref('')
+const databaseList = ref([])
+const databaseListLoading = ref(false)
+const databaseTotal = ref(0)
+const databaseKeyword = ref('')
+const databaseStatusFilter = ref('')
 
 const compareScopeOptions = [
   { label: '数据', value: 'active', countClass: 'text-blue-400', selectedClass: 'bg-blue-500/20 border-blue-500/50 text-blue-300' },
@@ -658,6 +1007,244 @@ const loadDatabaseStats = async () => {
     ElMessage.error({message: '获取统计信息失败', duration: 2000})
   }
 }
+
+const switchListMode = (mode) => {
+  if (mode === 'compare' && !compareResults.value) return
+  listDataMode.value = mode
+  currentPage.value = 1
+  if (mode === 'uploaderSummary') {
+    loadUploaderSummary()
+  } else if (mode === 'database') {
+    loadDatabaseList()
+  }
+}
+
+const loadUploaderSummary = async () => {
+  if (!isSuperAdmin.value) return
+  uploaderSummaryLoading.value = true
+  try {
+    const response = await customerDataCompareAPI.getUploaderSummary({
+      dateScope: uploaderDateScope.value
+    })
+    if (response.success) {
+      uploaderSummary.value = response.data || []
+      uploaderSummaryMeta.value = response.meta || {
+        totalRecords: (response.data || []).reduce((sum, row) => sum + (row.total_count || 0), 0),
+        trackedCount: (response.data || []).reduce((sum, row) => sum + (row.total_count || 0), 0),
+        missingCount: 0,
+        uploaderCount: (response.data || []).length
+      }
+      await loadUploadSessions()
+    } else {
+      ElMessage.error({ message: response.message || '获取上传人统计失败', duration: 2000 })
+    }
+  } catch (error) {
+    console.error('获取上传人统计失败:', error)
+    ElMessage.error({ message: '获取上传人统计失败', duration: 2000 })
+  } finally {
+    uploaderSummaryLoading.value = false
+  }
+}
+
+const uploaderDateScopeLabel = computed(() => {
+  return uploaderDateScopeOptions.find(opt => opt.value === uploaderDateScope.value)?.label || '今天'
+})
+
+const refreshSelectedUploaderCounts = async () => {
+  if (!selectedUploader.value) return
+  try {
+    const response = await customerDataCompareAPI.getUploaderSummary({
+      dateScope: uploaderDateScope.value
+    })
+    if (response.success) {
+      uploaderSummary.value = response.data || []
+      const updated = uploaderSummary.value.find(
+        row => row.uploader_id === selectedUploader.value.uploader_id
+      )
+      if (updated) {
+        selectedUploader.value = updated
+      }
+    }
+  } catch (error) {
+    console.error('刷新上传人统计失败:', error)
+  }
+}
+
+const onUploaderDateScopeChange = async () => {
+  if (listDataMode.value === 'uploaderDetail') {
+    await refreshSelectedUploaderCounts()
+    currentPage.value = 1
+    loadDatabaseList()
+  } else {
+    loadUploaderSummary()
+  }
+}
+
+const loadUploadSessions = async () => {
+  try {
+    const response = await customerDataCompareAPI.getUploadSessions({
+      page: 1,
+      pageSize: 20,
+      dateScope: uploaderDateScope.value
+    })
+    if (response.success) {
+      uploadSessions.value = response.data || []
+    }
+  } catch (error) {
+    console.error('获取上传记录失败:', error)
+  }
+}
+
+const loadBackfillUserOptions = async () => {
+  if (!isSuperAdmin.value) return
+  try {
+    const response = await userAPI.getUserList({ page: 1, pageSize: 500 })
+    backfillUserOptions.value = response.data || response.list || []
+  } catch (error) {
+    console.error('加载用户列表失败:', error)
+  }
+}
+
+const runBackfillCreatedBy = async () => {
+  if (!backfillUserId.value) {
+    ElMessage.warning({ message: '请先选择上传人', duration: 2000 })
+    return
+  }
+
+  const selectedUser = backfillUserOptions.value.find(user => user.id === backfillUserId.value)
+  const userLabel = selectedUser?.name || selectedUser?.username || '所选用户'
+
+  try {
+    await ElMessageBox.confirm(
+      `将把当前统计范围（${uploaderDateScopeLabel.value}）内缺少上传人的 ${uploaderSummaryMeta.value.missingCount} 条数据，补全为「${userLabel}」。\n\n如果不同日期是不同人上传的，请切换日期范围后分批补全。`,
+      '补全上传人',
+      {
+        confirmButtonText: '确认补全',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+  } catch {
+    return
+  }
+
+  backfillLoading.value = true
+  try {
+    const response = await customerDataCompareAPI.backfillCreatedBy({
+      userId: backfillUserId.value,
+      dateScope: uploaderDateScope.value
+    })
+    if (response.success) {
+      ElMessage.success({ message: response.message || '补全成功', duration: 3000 })
+      await loadUploaderSummary()
+      await loadDatabaseStats()
+    } else {
+      ElMessage.error({ message: response.message || '补全失败', duration: 3000 })
+    }
+  } catch (error) {
+    ElMessage.error({ message: error?.response?.data?.message || '补全失败', duration: 3000 })
+  } finally {
+    backfillLoading.value = false
+  }
+}
+
+const viewUploaderDetail = (row, status = '') => {
+  selectedUploader.value = row
+  uploaderDetailStatus.value = status
+  listDataMode.value = 'uploaderDetail'
+  currentPage.value = 1
+  loadDatabaseList()
+}
+
+const backToUploaderSummary = () => {
+  selectedUploader.value = null
+  uploaderDetailStatus.value = ''
+  listDataMode.value = 'uploaderSummary'
+  currentPage.value = 1
+}
+
+const setUploaderDetailStatus = (status) => {
+  uploaderDetailStatus.value = status
+  currentPage.value = 1
+  loadDatabaseList()
+}
+
+const loadDatabaseList = async () => {
+  if (!isSuperAdmin.value) return
+  databaseListLoading.value = true
+  try {
+    const params = {
+      page: currentPage.value,
+      pageSize: pageSize.value,
+      keyword: databaseKeyword.value.trim()
+    }
+    if (listDataMode.value === 'uploaderDetail' && selectedUploader.value) {
+      params.createdBy = selectedUploader.value.uploader_id
+      params.dateScope = uploaderDateScope.value
+      if (uploaderDetailStatus.value) {
+        params.status = uploaderDetailStatus.value
+      }
+    } else if (listDataMode.value === 'database') {
+      if (databaseStatusFilter.value) {
+        params.status = databaseStatusFilter.value
+      }
+    }
+
+    const response = await customerDataCompareAPI.getDatabaseList(params)
+    if (response.success) {
+      databaseList.value = response.data || []
+      databaseTotal.value = response.pagination?.total || 0
+    } else {
+      ElMessage.error({ message: response.message || '获取数据列表失败', duration: 2000 })
+    }
+  } catch (error) {
+    console.error('获取数据列表失败:', error)
+    ElMessage.error({ message: '获取数据列表失败', duration: 2000 })
+  } finally {
+    databaseListLoading.value = false
+  }
+}
+
+const uploaderDetailStatusTabs = computed(() => {
+  const row = selectedUploader.value
+  if (!row) return []
+  return [
+    { label: '全部', value: '', count: row.total_count, activeClass: 'bg-purple-500/30 text-purple-300 border-purple-500/50' },
+    { label: '数据', value: 'active', count: row.active_count, activeClass: 'bg-blue-500/30 text-blue-300 border-blue-500/50' },
+    { label: '意向客户', value: 'inactive', count: row.inactive_count, activeClass: 'bg-yellow-500/30 text-yellow-300 border-yellow-500/50' },
+    { label: '进群客户', value: 'vip', count: row.vip_count, activeClass: 'bg-green-500/30 text-green-300 border-green-500/50' }
+  ]
+})
+
+const activeTotalPages = computed(() => {
+  if (listDataMode.value === 'upload') return totalPages.value
+  if (listDataMode.value === 'compare') return totalResultPages.value
+  if (listDataMode.value === 'uploaderDetail' || listDataMode.value === 'database') {
+    return Math.max(1, Math.ceil(databaseTotal.value / pageSize.value))
+  }
+  return 1
+})
+
+const paginationTotal = computed(() => {
+  if (listDataMode.value === 'upload') return customerList.value.length
+  if (listDataMode.value === 'compare') return compareResults.value?.results?.length || 0
+  if (listDataMode.value === 'uploaderDetail' || listDataMode.value === 'database') return databaseTotal.value
+  return 0
+})
+
+const paginationStart = computed(() => {
+  if (paginationTotal.value === 0) return 0
+  return (currentPage.value - 1) * pageSize.value + 1
+})
+
+const paginationEnd = computed(() => {
+  return Math.min(currentPage.value * pageSize.value, paginationTotal.value)
+})
+
+const showListPagination = computed(() => {
+  if (listDataMode.value === 'uploaderSummary') return false
+  return paginationTotal.value > 0
+})
 
 const getStatusCount = (status) => {
   return databaseStats.value.statusCounts?.[status] ?? 0
@@ -735,7 +1322,10 @@ const deleteAllDatabaseCustomers = async () => {
     if (response.success) {
       ElMessage.success({ message: response.message || '客户数据已删除', duration: 3000 })
       compareResults.value = null
-      showInputData.value = true
+      listDataMode.value = isSuperAdmin.value ? 'uploaderSummary' : 'upload'
+      if (isSuperAdmin.value) {
+        await loadUploaderSummary()
+      }
       await loadDatabaseStats()
     } else {
       ElMessage.error({ message: response.message || '删除失败', duration: 3000 })
@@ -1286,7 +1876,7 @@ const startCompare = async () => {
         normalizeCompareResultStatuses(response.data.results)
         compareResults.value = response.data
         compareResults.value.compareStatuses = compareStatuses
-        showInputData.value = false
+        listDataMode.value = 'compare'
         currentPage.value = 1
         ElMessage.success({message: `对比完成：发现 ${response.data.summary.duplicate} 条重复，${response.data.summary.unique} 条新客户`, duration: 3000})
       } else {
@@ -1393,7 +1983,7 @@ const startCompare = async () => {
     }
     
     // 自动切换到对比结果视图
-    showInputData.value = false
+    listDataMode.value = 'compare'
     currentPage.value = 1
     
     ElMessage.success({
@@ -1584,12 +2174,29 @@ const saveNewCustomersToDatabase = async () => {
     
     if (totalSuccess > 0) {
       ElMessage.success({ message, duration: 5000 })
+      try {
+        await customerDataCompareAPI.recordUploadSession({
+          fileName: uploadedFileName.value,
+          totalSubmitted: customersToSave.length,
+          successCount: totalSuccess,
+          failedCount: totalFailed,
+          duplicateCount: totalDuplicate,
+          invalidCount: totalInvalid,
+          compareStatuses,
+          defaultStatus: defaultImportStatus.value
+        })
+      } catch (logError) {
+        console.warn('保存上传批次记录失败:', logError)
+      }
     } else {
       ElMessage.warning({ message, duration: 5000 })
     }
     
     // 刷新数据库统计信息
     await loadDatabaseStats()
+    if (isSuperAdmin.value && listDataMode.value === 'uploaderSummary') {
+      await loadUploaderSummary()
+    }
     
     // 可选：标记已保存的数据
     newCustomers.forEach(customer => {
@@ -1706,13 +2313,24 @@ watch(() => customerList.value.length, () => {
 })
 
 // 监听视图切换，重置到第一页
-watch(() => showInputData.value, () => {
+watch(() => listDataMode.value, () => {
   currentPage.value = 1
+})
+
+watch(currentPage, () => {
+  if (listDataMode.value === 'uploaderDetail' || listDataMode.value === 'database') {
+    loadDatabaseList()
+  }
 })
 
 onMounted(() => {
   loadDatabaseStats()
-  // 添加一行空数据供用户输入
-  addNewRow()
+  if (isSuperAdmin.value) {
+    listDataMode.value = 'uploaderSummary'
+    loadUploaderSummary()
+    loadBackfillUserOptions()
+  } else {
+    addNewRow()
+  }
 })
 </script>
