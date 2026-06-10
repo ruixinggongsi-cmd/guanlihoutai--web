@@ -28,7 +28,7 @@
             </div>
             <div class="flex space-x-3">
               <button
-                v-if="isSuperAdmin"
+                v-if="canDeleteAllDatabase"
                 @click="deleteAllDatabaseCustomers"
                 class="px-6 py-3 bg-gradient-to-r from-red-500 via-red-600 to-red-700 hover:from-red-600 hover:via-red-700 hover:to-red-800 text-white font-semibold rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-0.5 active:scale-95 flex items-center space-x-3 group"
               >
@@ -69,9 +69,9 @@
             <span :class="option.countClass" class="text-lg font-bold">{{ getStatusCount(option.value) }}</span>
           </div>
         </div>
-        <p v-if="isSuperAdmin" class="text-sm text-purple-300 mt-4">
+        <p v-if="canDeleteAllDatabase || canViewAllDatabase || canViewUploaderStats" class="text-sm text-purple-300 mt-4">
           <i class="fas fa-shield-alt mr-1"></i>
-          超级管理员权限：可查看并删除全部客户数据
+          高级权限：可按上传人统计、查看全部数据或删除全部客户
         </p>
       </div>
 
@@ -252,7 +252,7 @@
             <div class="flex items-end">
               <button 
                 @click="startCompare"
-                :disabled="customerList.length === 0 || comparing || selectedCompareScopes.length === 0"
+                :disabled="customerList.length === 0 || comparing || selectedCompareScopes.length === 0 || !canCompareDatabase"
                 class="px-8 py-3 bg-gradient-to-r from-green-500 via-green-600 to-green-700 hover:from-green-600 hover:via-green-700 hover:to-green-800 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-3 text-lg"
               >
                 <i v-if="comparing" class="fas fa-spinner fa-spin"></i>
@@ -285,7 +285,7 @@
                 </span>
               </p>
               <div
-                v-if="listDataMode === 'uploaderSummary' && uploaderSummaryMeta.missingCount > 0"
+                v-if="canViewUploaderStats && listDataMode === 'uploaderSummary' && uploaderSummaryMeta.missingCount > 0"
                 class="mt-2 flex flex-wrap items-center gap-2 text-sm"
               >
                 <span class="text-yellow-300">
@@ -401,6 +401,7 @@
                 <span>下载全部结果</span>
               </button>
               <button
+                v-if="canImportDatabase"
                 @click="saveNewCustomersToDatabase"
                 :disabled="!compareResults || !compareResults.summary || Number(compareResults.summary?.unique || 0) === 0 || saving"
                 class="inline-flex items-center justify-center h-10 px-4 bg-purple-500/20 text-purple-400 border border-purple-500/50 rounded-lg hover:bg-purple-500/30 transition-all duration-300 gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -431,8 +432,9 @@
 
           <!-- 导航 Tab 行（独立一行，统一高度对齐） -->
           <div class="flex flex-wrap items-center gap-2 pb-4 mb-4 border-b border-white/10">
-            <template v-if="isSuperAdmin">
+            <template v-if="canViewUploaderStats || canViewAllDatabase">
               <button
+                v-if="canViewUploaderStats"
                 @click="switchListMode('uploaderSummary')"
                 :class="listDataMode === 'uploaderSummary' || listDataMode === 'uploaderDetail' ? 'bg-purple-500/30 text-purple-300 border-purple-500/50' : 'bg-white/5 text-gray-400 border-white/20'"
                 class="inline-flex items-center justify-center h-10 px-4 rounded-lg border hover:bg-white/10 transition-all duration-300 text-sm whitespace-nowrap"
@@ -441,6 +443,7 @@
                 按上传人
               </button>
               <button
+                v-if="canViewAllDatabase"
                 @click="switchListMode('database')"
                 :class="listDataMode === 'database' ? 'bg-indigo-500/30 text-indigo-300 border-indigo-500/50' : 'bg-white/5 text-gray-400 border-white/20'"
                 class="inline-flex items-center justify-center h-10 px-4 rounded-lg border hover:bg-white/10 transition-all duration-300 text-sm whitespace-nowrap"
@@ -1010,7 +1013,12 @@ const compareScopeOptions = [
 const importStatusOptions = ['数据', '意向客户', '进群客户']
 const selectedCompareScopes = ref(['active', 'inactive', 'vip'])
 const defaultImportStatus = ref('数据')
-const isSuperAdmin = computed(() => permissionUtils.isSuperAdmin())
+const canCompareDatabase = computed(() => permissionUtils.hasPermission('database_compare:compare'))
+const canImportDatabase = computed(() => permissionUtils.hasPermission('database_compare:import'))
+const canViewUploaderStats = computed(() => permissionUtils.hasPermission('database_compare:uploader_stats'))
+const canViewAllDatabase = computed(() => permissionUtils.hasPermission('database_compare:database_view'))
+const canDeleteAllDatabase = computed(() => permissionUtils.hasPermission('database_compare:delete_all'))
+const canManageDatabaseList = computed(() => canViewUploaderStats.value || canViewAllDatabase.value)
 
 // 进度状态
 const compareProgress = ref({
@@ -1056,7 +1064,7 @@ const switchListMode = (mode) => {
 }
 
 const loadUploaderSummary = async () => {
-  if (!isSuperAdmin.value) return
+  if (!canViewUploaderStats.value) return
   uploaderSummaryLoading.value = true
   try {
     const response = await customerDataCompareAPI.getUploaderSummary({
@@ -1149,7 +1157,7 @@ const loadUploadSessions = async () => {
 }
 
 const loadBackfillUserOptions = async () => {
-  if (!isSuperAdmin.value) return
+  if (!canViewUploaderStats.value) return
   try {
     const response = await userAPI.getUserList({ page: 1, pageSize: 500 })
     backfillUserOptions.value = response.data || response.list || []
@@ -1235,7 +1243,9 @@ const onDatabaseDateScopeChange = () => {
 }
 
 const loadDatabaseList = async () => {
-  if (!isSuperAdmin.value) return
+  if (listDataMode.value === 'database' && !canViewAllDatabase.value) return
+  if (listDataMode.value === 'uploaderDetail' && !canViewUploaderStats.value) return
+  if (!canManageDatabaseList.value) return
   databaseListLoading.value = true
   try {
     const params = {
@@ -1397,8 +1407,8 @@ const deleteAllDatabaseCustomers = async () => {
     if (response.success) {
       ElMessage.success({ message: response.message || '客户数据已删除', duration: 3000 })
       compareResults.value = null
-      listDataMode.value = isSuperAdmin.value ? 'uploaderSummary' : 'upload'
-      if (isSuperAdmin.value) {
+      listDataMode.value = canViewUploaderStats.value ? 'uploaderSummary' : 'upload'
+      if (canViewUploaderStats.value) {
         await loadUploaderSummary()
       }
       await loadDatabaseStats()
@@ -2269,7 +2279,7 @@ const saveNewCustomersToDatabase = async () => {
     
     // 刷新数据库统计信息
     await loadDatabaseStats()
-    if (isSuperAdmin.value && listDataMode.value === 'uploaderSummary') {
+    if (canViewUploaderStats.value && listDataMode.value === 'uploaderSummary') {
       await loadUploaderSummary()
     }
     
@@ -2400,7 +2410,7 @@ watch(currentPage, () => {
 
 onMounted(() => {
   loadDatabaseStats()
-  if (isSuperAdmin.value) {
+  if (canViewUploaderStats.value) {
     listDataMode.value = 'uploaderSummary'
     loadUploaderSummary()
     loadBackfillUserOptions()

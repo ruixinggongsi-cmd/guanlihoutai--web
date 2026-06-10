@@ -1,5 +1,33 @@
 import { useUserStore } from '../stores/user'
 
+const DATABASE_COMPARE_MENU_ID = '550e8400-e29b-41d4-a716-446655440019'
+const DATABASE_COMPARE_BASIC_PERMISSIONS = [
+  'database_compare:view',
+  'database_compare:compare',
+  'database_compare:import'
+]
+
+function walkMenus(menus, visitor) {
+  if (!menus || !Array.isArray(menus)) return
+  menus.forEach(menu => {
+    visitor(menu)
+    if (menu.children?.length) walkMenus(menu.children, visitor)
+  })
+}
+
+function hasDatabaseCompareMenuAccess(userMenus) {
+  let found = false
+  walkMenus(userMenus, menu => {
+    if (
+      menu.path === '/system/database-compare' ||
+      String(menu.id) === DATABASE_COMPARE_MENU_ID
+    ) {
+      found = true
+    }
+  })
+  return found
+}
+
 /**
  * 权限检查工具函数
  */
@@ -15,6 +43,11 @@ export const permissionUtils = {
     // 如果用户没有登录，返回false
     if (!userStore.isLoggedIn) {
       return false
+    }
+
+    // 超级管理员拥有全部功能权限
+    if (this.isSuperAdmin()) {
+      return true
     }
     
     // 获取用户菜单列表，只提取功能选项（type='function'的菜单项）
@@ -42,15 +75,23 @@ export const permissionUtils = {
     // 提取所有功能权限
     extractFunctions(userMenus)
     
-    // 检查是否有指定权限
-    return functionPermissions.some(permission => {
-      // 支持多种匹配方式
+    const hasExplicit = functionPermissions.some(permission => {
       if (permission.path === permissionCode) return true
       if (permission.code === permissionCode) return true
       if (permission.name === permissionCode) return true
-      
       return false
     })
+    if (hasExplicit) return true
+
+    // 向后兼容：有「数据库对比」菜单即可使用基础功能
+    if (
+      DATABASE_COMPARE_BASIC_PERMISSIONS.includes(permissionCode) &&
+      hasDatabaseCompareMenuAccess(userMenus)
+    ) {
+      return true
+    }
+
+    return false
   },
 
   /**

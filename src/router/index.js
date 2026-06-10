@@ -83,7 +83,7 @@ const routes = [
     path: '/system/database-compare',
     name: 'DatabaseCompare',
     component: () => import('../views/system/DatabaseCompare.vue'),
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true, permission: 'database_compare:view' }
   },
   {
     path: '/approval/expenses',
