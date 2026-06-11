@@ -969,6 +969,31 @@ import { permissionUtils } from '../../utils/permission.js'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as XLSX from 'xlsx'
 
+const formatPhoneNumber = (phoneValue) => {
+  if (!phoneValue && phoneValue !== 0) return ''
+
+  let phoneStr = String(phoneValue)
+
+  if (phoneStr.includes('e+') || phoneStr.includes('E+')) {
+    const asNumber = Number(phoneStr)
+    if (Number.isFinite(asNumber)) {
+      phoneStr = asNumber.toLocaleString('fullwide', { useGrouping: false, maximumFractionDigits: 0 })
+    } else {
+      phoneStr = parseFloat(phoneStr).toString()
+    }
+  }
+
+  phoneStr = phoneStr.replace(/\D/g, '')
+  phoneStr = phoneStr.replace(/^0+/, '') || '0'
+
+  return phoneStr.trim()
+}
+
+const setWorksheetPhoneCell = (ws, row, col, phone) => {
+  const cellAddress = XLSX.utils.encode_cell({ r: row, c: col })
+  ws[cellAddress] = { t: 's', v: String(phone || '') }
+}
+
 // 响应式数据
 const customerList = ref([])
 const comparing = ref(false)
@@ -1482,7 +1507,7 @@ const downloadNewCustomers = () => {
     return
   }
   
-  const newCustomers = compareResults.value.results.filter(r => !r.isDuplicate)
+  const newCustomers = compareResults.value.results.filter(r => !r.isDuplicate && formatPhoneNumber(r.phone))
   
   if (newCustomers.length === 0) {
     ElMessage.warning({message: '没有新增客户数据', duration: 2000})
@@ -1494,10 +1519,10 @@ const downloadNewCustomers = () => {
     ['姓名', '电话', '邮箱', '公司', '地址', '客户状态', '对比状态', '备注']
   ]
   
-  newCustomers.forEach(customer => {
+  newCustomers.forEach((customer) => {
     data.push([
       customer.name || '',
-      customer.phone || '',
+      '',
       customer.email || '',
       customer.company || '',
       customer.address || '',
@@ -1510,6 +1535,10 @@ const downloadNewCustomers = () => {
   // 创建工作簿
   const wb = XLSX.utils.book_new()
   const ws = XLSX.utils.aoa_to_sheet(data)
+
+  newCustomers.forEach((customer, index) => {
+    setWorksheetPhoneCell(ws, index + 1, 1, formatPhoneNumber(customer.phone))
+  })
   
   // 设置列宽
   ws['!cols'] = [
@@ -1694,7 +1723,7 @@ const downloadAllResults = () => {
     return
   }
   
-  const newCustomers = compareResults.value.results.filter(r => !r.isDuplicate)
+  const newCustomers = compareResults.value.results.filter(r => !r.isDuplicate && formatPhoneNumber(r.phone))
   const duplicates = compareResults.value.results.filter(r => r.isDuplicate)
   
   const wb = XLSX.utils.book_new()
@@ -1705,10 +1734,10 @@ const downloadAllResults = () => {
       ['姓名', '电话', '邮箱', '公司', '地址', '客户状态', '对比状态', '备注']
     ]
     
-    newCustomers.forEach(customer => {
+    newCustomers.forEach((customer) => {
       newData.push([
         customer.name || '',
-        customer.phone || '',
+        '',
         customer.email || '',
         customer.company || '',
         customer.address || '',
@@ -1719,6 +1748,10 @@ const downloadAllResults = () => {
     })
     
     const wsNew = XLSX.utils.aoa_to_sheet(newData)
+
+    newCustomers.forEach((customer, index) => {
+      setWorksheetPhoneCell(wsNew, index + 1, 1, formatPhoneNumber(customer.phone))
+    })
     wsNew['!cols'] = [
       { wch: 15 }, { wch: 15 }, { wch: 25 }, { wch: 20 }, { wch: 25 }, { wch: 12 }, { wch: 10 }, { wch: 30 }
     ]
@@ -1824,37 +1857,15 @@ const handleFileUpload = async (event) => {
     const data = await file.arrayBuffer()
     const workbook = XLSX.read(data, { type: 'array' })
     const firstSheet = workbook.Sheets[workbook.SheetNames[0]]
-    const jsonData = XLSX.utils.sheet_to_json(firstSheet)
-    
-    // 转换为客户数据格式（支持中英文列名）
-    // 电话号码格式化函数：统一处理数字格式、科学计数法、字符串格式等
-    const formatPhone = (phoneValue) => {
-      if (!phoneValue && phoneValue !== 0) return ''
-      
-      // 转换为字符串
-      let phoneStr = String(phoneValue)
-      
-      // 处理科学计数法（如 1.21551e+10）
-      if (phoneStr.includes('e+') || phoneStr.includes('E+')) {
-        phoneStr = parseFloat(phoneStr).toString()
-      }
-      
-      // 去除所有非数字字符（保留数字）
-      phoneStr = phoneStr.replace(/\D/g, '')
-      
-      // 去除前导零（但保留至少一个数字）
-      phoneStr = phoneStr.replace(/^0+/, '') || '0'
-      
-      return phoneStr.trim()
-    }
+    const jsonData = XLSX.utils.sheet_to_json(firstSheet, { raw: false, defval: '' })
     
     customerList.value = jsonData.map(row => ({
       name: row['姓名'] || row['name'] || row['Name'] || '',
-      phone: formatPhone(row['电话'] || row['phone'] || row['Phone'] || ''),
+      phone: formatPhoneNumber(row['电话'] || row['phone'] || row['Phone'] || ''),
       email: row['邮箱'] || row['email'] || row['Email'] || '',
       company: row['公司'] || row['company'] || row['Company'] || '',
       address: row['地址'] || row['address'] || row['Address'] || '',
-      status: normalizeImportStatus(row['状态'] || row['status'] || row['Status'] || defaultImportStatus.value),
+      status: normalizeImportStatus(row['客户状态'] || row['状态'] || row['status'] || row['Status'] || defaultImportStatus.value),
       notes: row['备注'] || row['notes'] || row['Notes'] || ''
     })).filter(c => c.name || c.phone || c.email) // 过滤空行
     
@@ -1901,32 +1912,11 @@ const startCompare = async () => {
     return
   }
   
-  // 电话号码格式化函数：统一处理格式（与文件上传时保持一致）
-  const formatPhoneForCompare = (phoneValue) => {
-    if (!phoneValue && phoneValue !== 0) return ''
-    
-    // 转换为字符串
-    let phoneStr = String(phoneValue)
-    
-    // 处理科学计数法（如 1.21551e+10）
-    if (phoneStr.includes('e+') || phoneStr.includes('E+')) {
-      phoneStr = parseFloat(phoneStr).toString()
-    }
-    
-    // 去除所有非数字字符（保留数字）
-    phoneStr = phoneStr.replace(/\D/g, '')
-    
-    // 去除前导零（但保留至少一个数字）
-    phoneStr = phoneStr.replace(/^0+/, '') || '0'
-    
-    return phoneStr.trim()
-  }
-  
   // 过滤有效数据（至少要有电话号码），并统一格式化电话号码
   const validCustomers = customerList.value
     .map(c => ({
       ...c,
-      phone: formatPhoneForCompare(c.phone)
+      phone: formatPhoneNumber(c.phone)
     }))
     .filter(c => c.phone && c.phone.length > 0)
   
@@ -2094,7 +2084,7 @@ const saveNewCustomersToDatabase = async () => {
   }
   
   // 获取所有新增（不重复）的客户数据
-  const newCustomers = compareResults.value.results.filter(r => !r.isDuplicate)
+  const newCustomers = compareResults.value.results.filter(r => !r.isDuplicate && formatPhoneNumber(r.phone))
   
   if (newCustomers.length === 0) {
     ElMessage.warning({message: '没有新增客户数据可保存', duration: 2000})
@@ -2123,7 +2113,7 @@ const saveNewCustomersToDatabase = async () => {
     // 优化：创建电话号码到原始数据的映射（一次性构建，避免重复查找）
     const phoneToOriginalMap = new Map()
     customerList.value.forEach(c => {
-      const phone = String(c.phone || '').trim()
+      const phone = formatPhoneNumber(c.phone)
       if (phone) {
         phoneToOriginalMap.set(phone, c)
       }
@@ -2132,7 +2122,7 @@ const saveNewCustomersToDatabase = async () => {
     // 优化：快速准备数据，使用Map查找而不是数组find（O(1) vs O(n)）
     const customersToSave = []
     for (const customer of newCustomers) {
-      const phone = String(customer.phone || '').trim()
+      const phone = formatPhoneNumber(customer.phone)
       if (!phone) continue
       
       const originalCustomer = phoneToOriginalMap.get(phone)
@@ -2273,6 +2263,9 @@ const saveNewCustomersToDatabase = async () => {
       } catch (logError) {
         console.warn('保存上传批次记录失败:', logError)
       }
+
+      // 导入成功后自动重新对比，避免结果仍显示为「新增」
+      await startCompare()
     } else {
       ElMessage.warning({ message, duration: 5000 })
     }
