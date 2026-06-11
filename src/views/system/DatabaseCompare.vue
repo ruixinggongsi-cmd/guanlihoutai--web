@@ -1447,6 +1447,30 @@ const deleteAllDatabaseCustomers = async () => {
   }
 }
 
+const refreshCompareSummary = () => {
+  if (!compareResults.value?.results) return
+  const results = compareResults.value.results
+  const duplicate = results.filter(r => r.isDuplicate).length
+  const unique = results.length - duplicate
+  compareResults.value.summary = {
+    ...compareResults.value.summary,
+    total: results.length,
+    duplicate,
+    unique,
+    duplicateRate: results.length > 0 ? `${((duplicate / results.length) * 100).toFixed(2)}%` : '0%'
+  }
+}
+
+const markImportedCustomersAsDuplicate = (importedCustomers) => {
+  importedCustomers.forEach(customer => {
+    customer.saved = true
+    customer.isDuplicate = true
+    customer.duplicateReason = '已导入数据库（刚刚上传）'
+    customer.matchedCustomers = customer.matchedCustomers || []
+  })
+  refreshCompareSummary()
+}
+
 const normalizeCompareResultStatuses = (results = []) => {
   results.forEach(result => {
     if (!result.isDuplicate) {
@@ -1526,7 +1550,7 @@ const downloadNewCustomers = () => {
       customer.email || '',
       customer.company || '',
       customer.address || '',
-      customer.status || '数据',
+      getCustomerStatusText(customer.status) || '数据',
       '新增',
       customer.duplicateReason || ''
     ])
@@ -1581,7 +1605,10 @@ const downloadNewCustomers = () => {
   const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '').replace('T', '_')
   XLSX.writeFile(wb, `新增客户数据_${timestamp}.xlsx`)
   
-  ElMessage.success({message: `成功下载 ${newCustomers.length} 条新增客户数据`, duration: 2000})
+  ElMessage.success({
+    message: `成功下载 ${newCustomers.length} 条新增数据。这些数据尚未入库；若已点击「导入到数据库」，请勿再对比同一批号码。`,
+    duration: 5000
+  })
 }
 
 // 下载重复客户数据
@@ -2248,7 +2275,10 @@ const saveNewCustomersToDatabase = async () => {
     }
     
     if (totalSuccess > 0) {
-      ElMessage.success({ message, duration: 5000 })
+      ElMessage.success({
+        message: `${message}\n\n数据已写入数据库。若再次上传相同号码对比，会显示为「重复」，这是正常现象。`,
+        duration: 6000
+      })
       try {
         await customerDataCompareAPI.recordUploadSession({
           fileName: uploadedFileName.value,
@@ -2264,8 +2294,7 @@ const saveNewCustomersToDatabase = async () => {
         console.warn('保存上传批次记录失败:', logError)
       }
 
-      // 导入成功后自动重新对比，避免结果仍显示为「新增」
-      await startCompare()
+      markImportedCustomersAsDuplicate(newCustomers)
     } else {
       ElMessage.warning({ message, duration: 5000 })
     }
@@ -2275,11 +2304,6 @@ const saveNewCustomersToDatabase = async () => {
     if (canViewUploaderStats.value && listDataMode.value === 'uploaderSummary') {
       await loadUploaderSummary()
     }
-    
-    // 可选：标记已保存的数据
-    newCustomers.forEach(customer => {
-      customer.saved = true
-    })
     
   } catch (error) {
     console.error('保存失败，异常:', error)
