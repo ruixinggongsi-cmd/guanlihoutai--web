@@ -34,6 +34,10 @@ export const customerDataCompareAPI = {
   getUploadSessions(params = {}) {
     return request.get('/customer-data-compare/upload-sessions', params)
   },
+
+  bulkUpdateDuplicateStatus(data) {
+    return request.post('/customer-data-compare/bulk-update-status', data)
+  },
   
   // 批量保存新增客户数据到数据库
   saveNewCustomers(customerList, compareStatuses = null) {

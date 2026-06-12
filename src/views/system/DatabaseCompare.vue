@@ -376,6 +376,24 @@
               <span class="inline-flex items-center h-10 px-3 bg-blue-500/20 text-blue-400 rounded-lg text-sm">
                 重复率: {{ compareResults.summary?.duplicateRate || '0%' }}
               </span>
+              <select
+                v-model="duplicateStatusTarget"
+                :disabled="updatingDuplicateStatus || compareResults.summary?.duplicate === 0"
+                class="h-10 px-3 bg-white/5 border border-white/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+              >
+                <option v-for="option in importStatusOptions" :key="option" :value="option" class="bg-slate-800">
+                  改为{{ option }}
+                </option>
+              </select>
+              <button
+                @click="bulkUpdateDuplicateStatus()"
+                :disabled="!compareResults || compareResults.summary?.duplicate === 0 || updatingDuplicateStatus"
+                class="inline-flex items-center justify-center h-10 px-4 bg-orange-500/20 text-orange-400 border border-orange-500/50 rounded-lg hover:bg-orange-500/30 transition-all duration-300 gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <i class="fas fa-edit" v-if="!updatingDuplicateStatus"></i>
+                <i class="fas fa-spinner fa-spin" v-else></i>
+                <span>{{ updatingDuplicateStatus ? '修改中...' : '批量修改重复状态' }}</span>
+              </button>
               <button
                 @click="downloadNewCustomers"
                 :disabled="!compareResults || compareResults.summary?.unique === 0"
@@ -888,6 +906,13 @@
                           >
                             {{ getCustomerStatusText(match.status) }}
                           </span>
+                          <button
+                            @click="bulkUpdateDuplicateStatus([match.id], result.phone)"
+                            :disabled="updatingDuplicateStatus || getCustomerStatusText(match.status) === duplicateStatusTarget"
+                            class="ml-2 px-2 py-0.5 rounded bg-orange-500/20 text-orange-300 border border-orange-500/40 hover:bg-orange-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            改为{{ duplicateStatusTarget }}
+                          </button>
                           <span v-if="match.email" class="text-gray-500">- {{ match.email }}</span>
                         </div>
                         <div class="text-gray-400 ml-4 space-x-3">
@@ -898,6 +923,25 @@
                           <span v-if="match.created_at">
                             <i class="fas fa-clock mr-1"></i>
                             创建时间: {{ formatDate(match.created_at) }}
+                          </span>
+                        </div>
+                        <div v-if="match.latest_status_change" class="text-gray-400 ml-4 mt-1">
+                          <i class="fas fa-history mr-1"></i>
+                          最近修改:
+                          {{ match.latest_status_change.changed_by_user?.name || '未知用户' }}
+                          于 {{ formatDate(match.latest_status_change.changed_at) }}
+                          将 {{ getCustomerStatusText(match.latest_status_change.old_status) }}
+                          改为 {{ getCustomerStatusText(match.latest_status_change.new_status) }}
+                        </div>
+                        <div v-if="match.status_change_logs && match.status_change_logs.length > 1" class="text-gray-500 ml-4 mt-1">
+                          历史记录:
+                          <span
+                            v-for="log in match.status_change_logs.slice(1, 3)"
+                            :key="log.id"
+                            class="mr-3"
+                          >
+                            {{ log.changed_by_user?.name || '未知用户' }} {{ formatDate(log.changed_at) }}
+                            {{ getCustomerStatusText(log.old_status) }}→{{ getCustomerStatusText(log.new_status) }}
                           </span>
                         </div>
                       </div>
@@ -1000,6 +1044,8 @@ const comparing = ref(false)
 const compareResults = ref(null)
 const databaseStats = ref({ totalCustomers: 0 })
 const saving = ref(false)
+const updatingDuplicateStatus = ref(false)
+const duplicateStatusTarget = ref('进群客户')
 const uploadedFileName = ref('')
 const currentPage = ref(1)
 const pageSize = ref(100)
@@ -1395,6 +1441,122 @@ const applyDefaultStatusToNewResults = () => {
     }
   })
   ElMessage.success({ message: `已将 ${count} 条新增数据状态设为「${defaultImportStatus.value}」`, duration: 2000 })
+}
+
+const collectDuplicateMatchedCustomers = () => {
+  const customerMap = new Map()
+  const comparePhoneMap = {}
+
+  if (!compareResults.value?.results) {
+    return { ids: [], comparePhoneMap }
+  }
+
+  compareResults.value.results.forEach(result => {
+    if (!result.isDuplicate || !Array.isArray(result.matchedCustomers)) return
+    result.matchedCustomers.forEach(match => {
+      if (!match?.id) return
+      if (!customerMap.has(match.id)) {
+        customerMap.set(match.id, match)
+        comparePhoneMap[match.id] = result.phone || match.phone || ''
+      }
+    })
+  })
+
+  return {
+    ids: Array.from(customerMap.keys()),
+    comparePhoneMap
+  }
+}
+
+const mergeUpdatedMatchedCustomers = (updatedCustomers = []) => {
+  if (!compareResults.value?.results || updatedCustomers.length === 0) return
+
+  const updatedMap = new Map(updatedCustomers.map(customer => [customer.id, customer]))
+  compareResults.value.results.forEach(result => {
+    if (!Array.isArray(result.matchedCustomers)) return
+    let firstUpdatedStatus = ''
+
+    result.matchedCustomers = result.matchedCustomers.map(match => {
+      const updated = updatedMap.get(match.id)
+      if (!updated) return match
+      if (!firstUpdatedStatus) firstUpdatedStatus = updated.status
+      return {
+        ...match,
+        ...updated,
+        created_by_user: match.created_by_user || updated.created_by_user
+      }
+    })
+
+    if (firstUpdatedStatus) {
+      result.status = firstUpdatedStatus
+      result.duplicateReason = `数据库已有相同号码，状态已改为：${getCustomerStatusText(firstUpdatedStatus)}`
+    }
+  })
+}
+
+const bulkUpdateDuplicateStatus = async (customerIds = null, comparePhone = '') => {
+  if (!compareResults.value?.results) {
+    ElMessage.warning({ message: '没有对比结果', duration: 2000 })
+    return
+  }
+
+  let ids = []
+  let comparePhoneMap = {}
+
+  if (Array.isArray(customerIds) && customerIds.length > 0) {
+    ids = [...new Set(customerIds.filter(Boolean))]
+    ids.forEach(id => {
+      comparePhoneMap[id] = comparePhone || ''
+    })
+  } else {
+    const collected = collectDuplicateMatchedCustomers()
+    ids = collected.ids
+    comparePhoneMap = collected.comparePhoneMap
+  }
+
+  if (ids.length === 0) {
+    ElMessage.warning({ message: '没有可修改的重复客户', duration: 2000 })
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      `确定要将 ${ids.length} 条重复客户状态批量修改为「${duplicateStatusTarget.value}」吗？\n\n系统会记录本次修改人和修改时间。`,
+      '批量修改重复客户状态',
+      {
+        confirmButtonText: '确认修改',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+  } catch {
+    return
+  }
+
+  updatingDuplicateStatus.value = true
+  try {
+    const response = await customerDataCompareAPI.bulkUpdateDuplicateStatus({
+      customerIds: ids,
+      status: duplicateStatusTarget.value,
+      comparePhoneMap,
+      note: '数据库对比页面修改重复客户状态'
+    })
+
+    if (response.success) {
+      mergeUpdatedMatchedCustomers(response.data?.customers || [])
+      await loadDatabaseStats()
+      ElMessage.success({ message: response.message || '状态修改成功', duration: 3000 })
+      if (response.data?.historySkipped) {
+        ElMessage.warning({ message: '状态已修改，但状态记录表未创建，请执行 create_customer_status_change_logs.sql', duration: 5000 })
+      }
+    } else {
+      ElMessage.error({ message: response.message || '状态修改失败', duration: 3000 })
+    }
+  } catch (error) {
+    ElMessage.error({ message: error?.response?.data?.message || error.message || '状态修改失败', duration: 3000 })
+  } finally {
+    updatingDuplicateStatus.value = false
+  }
 }
 
 const deleteAllDatabaseCustomers = async () => {
