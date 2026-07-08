@@ -194,7 +194,7 @@
             >
               <div v-if="activeMobileSubmenu === item.name" class="pl-6 mt-2 space-y-2 overflow-hidden">
                 <router-link
-                  v-for="child in item.children"
+                  v-for="child in filteredMenuChildren(item)"
                   :key="child.name"
                   :to="child.path"
                   class="block text-gray-400 hover:text-white hover:bg-white/10 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-300 flex items-center border-l-2 border-white/20 hover:border-primary-light"
@@ -495,18 +495,25 @@ const filteredMenuChildren = (item) => {
     })));
   }
   
+  const seenMenuKeys = new Set();
   const filtered = item.children.filter(c => {
     // 对于子菜单，只要有path就可以显示（不强制要求type必须是'menu'）
     // 因为很多功能菜单（type='function'）也需要作为子菜单显示在导航栏中
     const hasPath = !!c.path;
     const isMenuType = c.type === 'menu';
     const hasChildren = c.children && c.children.length > 0;
+    const isDuplicateOfParent = c.name === item.name || (c.path && item.path && c.path === item.path);
+    const menuKey = c.path || c.name;
+    const isDuplicateSibling = seenMenuKeys.has(menuKey);
     
     // 允许显示的条件：
     // 1. 有path且type是menu
     // 2. 有path且是子菜单项（有children）
     // 3. 有path且type是function（功能菜单也需要显示）
-    const shouldInclude = typeof c.path === 'string' && c.path.startsWith('/') && (isMenuType || hasChildren || c.type === 'function');
+    const shouldInclude = !isDuplicateOfParent && !isDuplicateSibling && typeof c.path === 'string' && c.path.startsWith('/') && (isMenuType || hasChildren || c.type === 'function');
+    if (shouldInclude) {
+      seenMenuKeys.add(menuKey);
+    }
     
     if ((item.name === '客户管理' || String(item.id) === '550e8400-e29b-41d4-a716-446655440012' ||
          item.name === '申请管理' || String(item.id) === '550e8400-e29b-41d4-a716-446655440003') && !shouldInclude) {

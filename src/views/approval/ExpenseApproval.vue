@@ -172,7 +172,7 @@
                 class="px-4 py-2 rounded-md font-medium transition-all duration-300"
               >
                 <i class="fas fa-clock mr-2"></i>
-                待我审批
+                {{ isSuperAdmin ? '全部待审批' : '待我审批' }}
                 <span class="ml-2 bg-yellow-500/20 text-yellow-400 px-2 py-1 rounded-full text-xs">{{ pendingCount }}</span>
               </button>
               <button 
@@ -181,7 +181,7 @@
                 class="px-4 py-2 rounded-md font-medium transition-all duration-300"
               >
                 <i class="fas fa-history mr-2"></i>
-                我审批的
+                {{ isSuperAdmin ? '全部已审批' : '我审批的' }}
                 <span class="ml-2 bg-blue-500/20 text-blue-400 px-2 py-1 rounded-full text-xs">{{ processedCount }}</span>
               </button>
             </div>
@@ -820,6 +820,7 @@ import { expenseApplicationsAPI } from '@/api/expenseApplications'
 import { expenseCategoryAPI } from '@/api/expenseCategory'
 import request from '@/utils/request'
 import approvalNotificationService from '@/utils/approvalNotification'
+import { permissionUtils } from '@/utils/permission'
 
 // 响应式数据
 const searchKeyword = ref('')
@@ -859,6 +860,7 @@ const isDragging = ref(false)
 const fileInput = ref(null) // 文件输入框引用
 const maxFileSize = 100 * 1024 * 1024 // 100MB
 const allowedFileTypes = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'jpg', 'jpeg', 'png', 'zip', 'rar']
+const isSuperAdmin = computed(() => permissionUtils.isSuperAdmin())
 
 // 计算属性
 const availableSubCategories = computed(() => {
