@@ -430,6 +430,13 @@ const queryForm = reactive({
   groupBy: 'day' // 新增：趋势统计维度
 })
 
+const getDateString = (date) => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 const mainCategories = ref([])
 const loading = ref(false)
 const showValidation = ref(false) // 新增：显示验证信息
@@ -559,8 +566,8 @@ const setQuickDate = (type) => {
       break
   }
   
-  queryForm.startDate = startDate.toISOString().split('T')[0]
-  queryForm.endDate = endDate.toISOString().split('T')[0]
+  queryForm.startDate = getDateString(startDate)
+  queryForm.endDate = getDateString(endDate)
 }
 
 // 格式化日期
@@ -676,8 +683,8 @@ onMounted(async () => {
   const endDate = new Date()
   const startDate = new Date(endDate.getFullYear(), 0, 1)
 
-  queryForm.endDate = endDate.toISOString().split('T')[0]
-  queryForm.startDate = startDate.toISOString().split('T')[0]
+  queryForm.endDate = getDateString(endDate)
+  queryForm.startDate = getDateString(startDate)
   
   // 延迟检查，确保用户信息已加载
   setTimeout(() => {

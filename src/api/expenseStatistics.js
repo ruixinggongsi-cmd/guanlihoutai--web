@@ -7,6 +7,21 @@ export const expenseStatisticsAPI = {
     return request.get('/expense-statistics/user-expense-total', params)
   },
 
+  // 获取当前审批流中的费用申请，用于区分审批中和待付款
+  getActiveApprovalApplications(params) {
+    return request.get('/expense-statistics/active-approval-applications', params)
+  },
+
+  // 获取财务已付款费用申请，按财务审批完成时间统计
+  getPaidExpenseApplications(params) {
+    return request.get('/expense-statistics/paid-expense-applications', params)
+  },
+
+  // 获取费用卡片汇总
+  getExpenseCardSummary(params) {
+    return request.get('/expense-statistics/expense-card-summary', params)
+  },
+
   // 获取分类费用统计
   getCategoryExpenseStats(params) {
     return request.get('/expense-statistics/category-expense-stats', params)
@@ -40,6 +55,9 @@ export const expenseStatisticsAPI = {
 
 // 导出单独的方法
 export const getUserExpenseTotal = (params) => expenseStatisticsAPI.getUserExpenseTotal(params)
+export const getActiveApprovalApplications = (params) => expenseStatisticsAPI.getActiveApprovalApplications(params)
+export const getPaidExpenseApplications = (params) => expenseStatisticsAPI.getPaidExpenseApplications(params)
+export const getExpenseCardSummary = (params) => expenseStatisticsAPI.getExpenseCardSummary(params)
 export const getCategoryExpenseStats = (params) => expenseStatisticsAPI.getCategoryExpenseStats(params)
 export const getUserCategoryBreakdown = (params) => expenseStatisticsAPI.getUserCategoryBreakdown(params)
 export const getExpenseOverview = (params) => expenseStatisticsAPI.getExpenseOverview(params)

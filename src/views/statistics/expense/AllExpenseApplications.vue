@@ -36,6 +36,7 @@
             <option value="all" class="bg-slate-800">全部状态</option>
             <option value="pending" class="bg-slate-800">待审批</option>
             <option value="approving" class="bg-slate-800">审批中</option>
+            <option value="payment_pending" class="bg-slate-800">待付款</option>
             <option value="approved" class="bg-slate-800">已通过</option>
             <option value="rejected" class="bg-slate-800">已拒绝</option>
             <option value="cancelled" class="bg-slate-800">已取消</option>
@@ -178,6 +179,15 @@
                   <i :class="getSortIcon('status')" class="text-xs"></i>
                 </div>
               </th>
+              <th
+                class="px-4 py-3 text-gray-300 font-semibold cursor-pointer hover:text-white transition-colors select-none"
+                @click="handleSort('progress_time')"
+              >
+                <div class="flex items-center space-x-2">
+                  <span>进度时间</span>
+                  <i :class="getSortIcon('progress_time')" class="text-xs"></i>
+                </div>
+              </th>
               <th 
                 class="px-4 py-3 text-gray-300 font-semibold cursor-pointer hover:text-white transition-colors select-none"
                 @click="handleSort('created_at')"
@@ -218,9 +228,12 @@
                 {{ formatDate(item.date || item.expense_date) }}
               </td>
               <td class="px-4 py-3">
-                <span :class="getStatusClass(item.status)">
+                <span :class="getStatusClass(item.status, item)">
                   {{ getStatusText(item.status, item) }}
                 </span>
+              </td>
+              <td class="px-4 py-3 text-gray-400 text-sm">
+                {{ formatDateTime(getProgressTime(item)) }}
               </td>
               <td class="px-4 py-3 text-gray-400 text-sm">
                 {{ formatDateTime(item.created_at) }}
@@ -247,7 +260,7 @@
               </td>
             </tr>
             <tr v-if="filteredApplications.length === 0">
-              <td colspan="9" class="px-4 py-8 text-center text-gray-400">
+              <td colspan="10" class="px-4 py-8 text-center text-gray-400">
                 <i class="fas fa-inbox text-2xl mb-2"></i>
                 <p>暂无数据</p>
               </td>
@@ -370,7 +383,7 @@
                       状态
                     </label>
                     <div class="max-w-xs text-right">
-                      <span :class="viewingExpense ? getStatusClass(viewingExpense.status) : ''" class="inline-flex items-center gap-2 px-3 py-1 rounded-lg text-sm font-medium">
+                      <span :class="viewingExpense ? getStatusClass(viewingExpense.status, viewingExpense) : ''" class="inline-flex items-center gap-2 px-3 py-1 rounded-lg text-sm font-medium">
                         {{ viewingExpense ? getStatusText(viewingExpense.status, viewingExpense) : '-' }}
                       </span>
                     </div>
@@ -383,6 +396,16 @@
                     </label>
                     <div class="text-white font-medium max-w-xs text-right">
                       {{ viewingExpense ? formatDate(viewingExpense.date || viewingExpense.expense_date) : '-' }}
+                    </div>
+                  </div>
+
+                  <div class="flex items-start justify-between py-3 border-b border-white/10">
+                    <label class="text-sm font-medium text-gray-400 flex items-center">
+                      <i class="fas fa-hourglass-half mr-2 text-emerald-400"></i>
+                      进度时间
+                    </label>
+                    <div class="text-emerald-300 text-sm font-medium max-w-xs text-right">
+                      {{ viewingExpense ? formatDateTime(getProgressTime(viewingExpense)) : '-' }}
                     </div>
                   </div>
                   
@@ -508,23 +531,14 @@
                   <div v-for="(node, index) in approvalNodes" :key="index" 
                        class="flex items-start justify-between py-4 border-b border-white/10 last:border-b-0 hover:bg-white/5 transition-all duration-200 px-3">
                     <div class="flex items-start space-x-4 flex-1">
-                      <div class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" :class="getApprovalNodeStatusClass(node.status)">
-                        <i :class="getApprovalNodeIcon(node.status)" class="text-white text-sm"></i>
+                      <div class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" :class="getApprovalNodeStatusClass(node)">
+                        <i :class="getApprovalNodeIcon(node)" class="text-white text-sm"></i>
                       </div>
                       <div class="flex-1 min-w-0">
                         <div class="flex items-center space-x-3 mb-1">
                           <div class="text-white font-medium text-sm">{{ node.nodeName || node.node_name || '审批节点' }}</div>
-                          <div class="font-medium text-xs px-2 py-0.5 rounded" :class="getApprovalNodeTextColor(node.status)">
-                            <span v-if="node.status === 'pending'">待审批</span>
-                            <span v-else-if="node.status === 'approving'">审批中</span>
-                            <span v-else-if="node.status === 'approved'">已通过</span>
-                            <span v-else-if="node.status === 'rejected'">
-                              <span v-if="isTimeoutRejection(node)">审核超时</span>
-                              <span v-else>已拒绝</span>
-                            </span>
-                            <span v-else-if="node.status === 'auto_approved'">自动审批</span>
-                            <span v-else-if="node.is_current_node">审批中……</span>
-                            <span v-else>待审批</span>
+                          <div class="font-medium text-xs px-2 py-0.5 rounded" :class="getApprovalNodeTextColor(node)">
+                            {{ getApprovalNodeText(node) }}
                           </div>
                         </div>
                         <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-gray-400 mb-2">
@@ -580,6 +594,7 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted, Teleport } from 'vue'
 import { expenseApplicationsAPI } from '@/api/expenseApplications'
+import { getActiveApprovalApplications, getPaidExpenseApplications } from '@/api/expenseStatistics'
 import { getDepartmentTree } from '@/api/department'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
@@ -646,9 +661,30 @@ const loadDepartmentTree = async () => {
 
 // 排序相关
 const sortConfig = reactive({
-  field: '', // 当前排序字段
-  order: '' // 'asc' 或 'desc'
+  field: 'progress_time', // 当前排序字段
+  order: 'desc' // 'asc' 或 'desc'
 })
+
+const getDateString = (date) => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+const parseLocalDate = (dateString) => {
+  const [year, month, day] = dateString.split('-').map(Number)
+  return new Date(year, month - 1, day)
+}
+
+const getLocalDateRange = (startDate, endDate) => {
+  const start = parseLocalDate(startDate)
+  const end = parseLocalDate(endDate)
+  return {
+    startAt: new Date(start.getFullYear(), start.getMonth(), start.getDate(), 0, 0, 0, 0).toISOString(),
+    endAt: new Date(end.getFullYear(), end.getMonth(), end.getDate(), 23, 59, 59, 999).toISOString()
+  }
+}
 
 // 加载数据
 const loadData = async () => {
@@ -661,8 +697,8 @@ const loadData = async () => {
     const oneYearAgo = new Date()
     oneYearAgo.setFullYear(today.getFullYear() - 1)
     
-    startDate = startDate || oneYearAgo.toISOString().split('T')[0]
-    endDate = endDate || today.toISOString().split('T')[0]
+    startDate = startDate || getDateString(oneYearAgo)
+    endDate = endDate || getDateString(today)
     
     console.log('[所有申请记录] 使用默认日期范围', { startDate, endDate })
   }
@@ -671,6 +707,111 @@ const loadData = async () => {
     loading.value = true
     error.value = ''
     emit('loading', true)
+
+    if (filters.status === 'approved') {
+      const { startAt, endAt } = getLocalDateRange(startDate, endDate)
+      const paidResponse = await getPaidExpenseApplications({
+        startAt,
+        endAt,
+        keyword: filters.keyword || undefined,
+        userName: filters.applicantName || undefined,
+        departmentId: filters.departmentId || undefined
+      })
+
+      if (paidResponse.success) {
+        const paidData = paidResponse.data || []
+        pagination.total = paidData.length
+        pagination.totalPages = Math.ceil(pagination.total / pagination.pageSize)
+        const start = (pagination.page - 1) * pagination.pageSize
+        applications.value = paidData.slice(start, start + pagination.pageSize)
+        return
+      }
+
+      error.value = paidResponse.message || '获取数据失败'
+      emit('error', error.value)
+      return
+    }
+
+    if (filters.status === 'payment_pending') {
+      const activeResponse = await getActiveApprovalApplications({
+        page: 1,
+        pageSize: 10000,
+        userName: filters.applicantName || undefined
+      })
+
+      if (activeResponse.success) {
+        const { startAt, endAt } = getLocalDateRange(startDate, endDate)
+        const startTime = new Date(startAt).getTime()
+        const endTime = new Date(endAt).getTime()
+        const keyword = String(filters.keyword || '').toLowerCase()
+        const paymentPendingData = (activeResponse.data || []).filter((item) => {
+          const businessStatus = getBusinessStatus(item.status, item)
+          const progressTime = new Date(getProgressTime(item) || 0).getTime()
+          const matchesTime = progressTime >= startTime && progressTime <= endTime
+          const matchesKeyword = !keyword ||
+            String(item.name || '').toLowerCase().includes(keyword) ||
+            String(item.description || '').toLowerCase().includes(keyword)
+          const matchesDepartment = !filters.departmentId ||
+            item.applicant_info?.department === filters.departmentId ||
+            item.applicant_department_id === filters.departmentId
+          return businessStatus === 'payment_pending' && matchesTime && matchesKeyword && matchesDepartment
+        })
+        pagination.total = paymentPendingData.length
+        pagination.totalPages = Math.ceil(pagination.total / pagination.pageSize)
+        const start = (pagination.page - 1) * pagination.pageSize
+        applications.value = paymentPendingData.slice(start, start + pagination.pageSize)
+        return
+      }
+
+      error.value = activeResponse.message || '获取数据失败'
+      emit('error', error.value)
+      return
+    }
+
+    if (filters.status === 'all') {
+      const { startAt, endAt } = getLocalDateRange(startDate, endDate)
+      const [paidResponse, activeResponse] = await Promise.all([
+        getPaidExpenseApplications({
+          startAt,
+          endAt,
+          keyword: filters.keyword || undefined,
+          userName: filters.applicantName || undefined,
+          departmentId: filters.departmentId || undefined
+        }),
+        getActiveApprovalApplications({
+          page: 1,
+          pageSize: 10000,
+          userName: filters.applicantName || undefined
+        })
+      ])
+
+      if (paidResponse.success && activeResponse.success) {
+        const startTime = new Date(startAt).getTime()
+        const endTime = new Date(endAt).getTime()
+        const keyword = String(filters.keyword || '').toLowerCase()
+        const activeData = (activeResponse.data || []).filter((item) => {
+          const progressTime = new Date(getProgressTime(item) || 0).getTime()
+          const matchesTime = progressTime >= startTime && progressTime <= endTime
+          const matchesKeyword = !keyword ||
+            String(item.name || '').toLowerCase().includes(keyword) ||
+            String(item.description || '').toLowerCase().includes(keyword)
+          const matchesDepartment = !filters.departmentId ||
+            item.applicant_info?.department === filters.departmentId ||
+            item.applicant_department_id === filters.departmentId
+          return matchesTime && matchesKeyword && matchesDepartment
+        })
+        const combinedData = [...(paidResponse.data || []), ...activeData]
+        pagination.total = combinedData.length
+        pagination.totalPages = Math.ceil(pagination.total / pagination.pageSize)
+        const start = (pagination.page - 1) * pagination.pageSize
+        applications.value = combinedData.slice(start, start + pagination.pageSize)
+        return
+      }
+
+      error.value = paidResponse.message || activeResponse.message || '获取数据失败'
+      emit('error', error.value)
+      return
+    }
 
     const params = {
       page: pagination.page,
@@ -747,6 +888,10 @@ const filteredApplications = computed(() => {
         case 'status':
           aValue = (a.status || '').toLowerCase()
           bValue = (b.status || '').toLowerCase()
+          break
+        case 'progress_time':
+          aValue = new Date(getProgressTime(a) || 0).getTime()
+          bValue = new Date(getProgressTime(b) || 0).getTime()
           break
         case 'created_at':
           aValue = new Date(a.created_at || 0).getTime()
@@ -915,11 +1060,54 @@ const formatDateTime = (dateStr) => {
   }
 }
 
+const getProgressTime = (item) => {
+  if (!item) return ''
+  const node = getCurrentApprovalNode(item)
+  if (item.paid_at) return item.paid_at
+  if (node?.approval_end_time) return node.approval_end_time
+  if (node?.updated_at) return node.updated_at
+  if (node?.approval_start_time) return node.approval_start_time
+  return item.updated_at || item.created_at || ''
+}
+
 // 获取审批节点状态文本颜色
-const getApprovalNodeTextColor = (status) => {
+const isFinanceApprovalNode = (node) => {
+  const nodeName = String(node?.node_name || node?.nodeName || '').toLowerCase()
+  return nodeName.includes('财务') ||
+    nodeName.includes('出款') ||
+    nodeName.includes('付款') ||
+    nodeName.includes('支付') ||
+    nodeName.includes('finance')
+}
+
+const getApprovalNodeBusinessStatus = (node) => {
+  if (!node) return ''
+  if (['pending', 'approving'].includes(node.status) && isFinanceApprovalNode(node)) {
+    return 'payment_pending'
+  }
+  return node.status || (node.is_current_node ? 'approving' : 'pending')
+}
+
+const getApprovalNodeText = (node) => {
+  if (isTimeoutRejection(node)) return '审核超时'
+  const statusMap = {
+    pending: '待审批',
+    approving: '审批中',
+    payment_pending: '待付款',
+    approved: '已通过',
+    rejected: '已拒绝',
+    auto_approved: '自动审批'
+  }
+  const businessStatus = getApprovalNodeBusinessStatus(node)
+  return statusMap[businessStatus] || '待审批'
+}
+
+const getApprovalNodeTextColor = (node) => {
+  const status = getApprovalNodeBusinessStatus(node)
   const colorMap = {
     pending: 'text-yellow-300',
     approving: 'text-blue-300',
+    payment_pending: 'text-emerald-300',
     approved: 'text-green-300',
     rejected: 'text-red-300',
     auto_approved: 'text-purple-300'
@@ -928,10 +1116,12 @@ const getApprovalNodeTextColor = (status) => {
 }
 
 // 获取审批节点状态样式
-const getApprovalNodeStatusClass = (status) => {
+const getApprovalNodeStatusClass = (node) => {
+  const status = getApprovalNodeBusinessStatus(node)
   const statusMap = {
     pending: 'bg-gradient-to-r from-yellow-400/80 to-orange-400/80',
     approving: 'bg-gradient-to-r from-blue-500/80 to-cyan-500/80',
+    payment_pending: 'bg-gradient-to-r from-emerald-500/80 to-teal-500/80',
     approved: 'bg-gradient-to-r from-emerald-500/80 to-green-500/80',
     rejected: 'bg-gradient-to-r from-red-500/80 to-rose-500/80',
     auto_approved: 'bg-gradient-to-r from-purple-500/80 to-indigo-500/80'
@@ -940,10 +1130,12 @@ const getApprovalNodeStatusClass = (status) => {
 }
 
 // 获取审批节点图标
-const getApprovalNodeIcon = (status) => {
+const getApprovalNodeIcon = (node) => {
+  const status = getApprovalNodeBusinessStatus(node)
   const iconMap = {
     pending: 'fas fa-clock',
     approving: 'fas fa-spinner',
+    payment_pending: 'fas fa-wallet',
     approved: 'fas fa-check',
     rejected: 'fas fa-times',
     auto_approved: 'fas fa-robot'
@@ -958,33 +1150,52 @@ const isTimeoutRejection = (node) => {
   return comment.includes('审核超时') || comment.includes('超时')
 }
 
+const getCurrentApprovalNode = (item) => {
+  if (!item) return null
+  return item.approvalNode || item.approval_node || null
+}
+
+const getBusinessStatus = (status, item = null) => {
+  const node = getCurrentApprovalNode(item)
+  const nodeStatus = node?.status
+  const waitingOnCurrentNode = ['pending', 'approving'].includes(nodeStatus) || ['pending', 'approving'].includes(status)
+  if (waitingOnCurrentNode) {
+    return isFinanceApprovalNode(node) ? 'payment_pending' : status
+  }
+  return status
+}
+
 // 获取状态文本
 const getStatusText = (status, item = null) => {
   // 如果是拒绝状态，检查是否是超时拒绝
   if (status === 'rejected' && item && item.is_timeout_rejection) {
     return '审核超时'
   }
-  
+
+  const businessStatus = getBusinessStatus(status, item)
   const statusMap = {
     pending: '待审批',
     approving: '审批中',
+    payment_pending: '待付款',
     approved: '已通过',
     rejected: '已拒绝',
     cancelled: '已取消'
   }
-  return statusMap[status] || status
+  return statusMap[businessStatus] || businessStatus
 }
 
 // 获取状态样式
-const getStatusClass = (status) => {
+const getStatusClass = (status, item = null) => {
+  const businessStatus = getBusinessStatus(status, item)
   const classMap = {
     pending: 'px-3 py-1 rounded-full text-xs font-semibold bg-yellow-500/20 text-yellow-400',
     approving: 'px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/20 text-blue-400',
+    payment_pending: 'px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-400',
     approved: 'px-3 py-1 rounded-full text-xs font-semibold bg-green-500/20 text-green-400',
     rejected: 'px-3 py-1 rounded-full text-xs font-semibold bg-red-500/20 text-red-400',
     cancelled: 'px-3 py-1 rounded-full text-xs font-semibold bg-gray-500/20 text-gray-400'
   }
-  return classMap[status] || 'px-3 py-1 rounded-full text-xs font-semibold bg-gray-500/20 text-gray-400'
+  return classMap[businessStatus] || 'px-3 py-1 rounded-full text-xs font-semibold bg-gray-500/20 text-gray-400'
 }
 
 // 查看费用申请详情

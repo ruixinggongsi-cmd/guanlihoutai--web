@@ -142,19 +142,19 @@
         </div>
       </div>
 
-      <!-- 待审批 -->
+      <!-- 待付款 -->
       <div 
-        @click="viewStatusList('pending')"
+        @click="viewStatusList('payment_pending')"
         class="backdrop-blur-lg bg-gradient-to-br from-red-500/20 to-pink-600/20 rounded-2xl border border-red-400/30 shadow-xl p-6 cursor-pointer hover:from-red-500/30 hover:to-pink-600/30 hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1"
       >
         <div class="flex items-center justify-between mb-4">
           <div class="flex items-center space-x-3">
             <div class="w-12 h-12 bg-gradient-to-br from-red-500 to-pink-600 rounded-xl flex items-center justify-center shadow-lg">
-              <i class="fas fa-hourglass-half text-white text-xl"></i>
+              <i class="fas fa-wallet text-white text-xl"></i>
             </div>
             <div>
-              <h3 class="text-sm font-medium text-gray-300">待审批</h3>
-              <p class="text-xs text-gray-400">等待审批处理</p>
+              <h3 class="text-sm font-medium text-gray-300">待付款</h3>
+              <p class="text-xs text-gray-400">等待财务付款</p>
             </div>
           </div>
         </div>
@@ -163,10 +163,10 @@
         </div>
         <div v-else class="space-y-2">
           <p class="text-3xl font-bold text-white">
-            ¥{{ formatAmount(pendingExpense) }}
+            ¥{{ formatAmount(paymentPendingExpense) }}
           </p>
           <p class="text-xs text-gray-400">
-            {{ pendingCount }} 条记录
+            {{ paymentPendingCount }} 条记录
           </p>
         </div>
       </div>
@@ -250,8 +250,8 @@
                       {{ formatDate(item.date || item.expense_date) }}
                     </td>
                     <td class="px-4 py-3">
-                      <span :class="getStatusClass(item.status)">
-                        {{ getStatusText(item.status) }}
+                      <span :class="getStatusClass(item.status, item)">
+                        {{ getStatusText(item.status, item) }}
                       </span>
                     </td>
                     <td class="px-4 py-3 text-center">
@@ -394,23 +394,14 @@
                   <div v-for="(node, index) in approvalNodes" :key="index" 
                        class="flex items-start justify-between py-4 border-b border-white/10 last:border-b-0 hover:bg-white/5 transition-all duration-200 px-3">
                     <div class="flex items-start space-x-4 flex-1">
-                      <div class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" :class="getApprovalNodeStatusClass(node.status)">
-                        <i :class="getApprovalNodeIcon(node.status)" class="text-white text-sm"></i>
+                      <div class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" :class="getApprovalNodeStatusClass(node)">
+                        <i :class="getApprovalNodeIcon(node)" class="text-white text-sm"></i>
                       </div>
                       <div class="flex-1 min-w-0">
                         <div class="flex items-center space-x-3 mb-1">
                           <div class="text-white font-medium text-sm">{{ node.nodeName || node.node_name || '审批节点' }}</div>
-                          <div class="font-medium text-xs px-2 py-0.5 rounded" :class="getApprovalNodeTextColor(node.status)">
-                            <span v-if="node.status === 'pending'">待审批</span>
-                            <span v-else-if="node.status === 'approving'">审批中</span>
-                            <span v-else-if="node.status === 'approved'">已通过</span>
-                            <span v-else-if="node.status === 'rejected'">
-                              <span v-if="isTimeoutRejection(node)">审核超时</span>
-                              <span v-else>已拒绝</span>
-                            </span>
-                            <span v-else-if="node.status === 'auto_approved'">自动审批</span>
-                            <span v-else-if="node.is_current_node">审批中……</span>
-                            <span v-else>待审批</span>
+                          <div class="font-medium text-xs px-2 py-0.5 rounded" :class="getApprovalNodeTextColor(node)">
+                            {{ getApprovalNodeText(node) }}
                           </div>
                         </div>
                         <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-gray-400 mb-2">
@@ -465,7 +456,7 @@
 
 <script setup>
 import { ref, onMounted, watch, computed } from 'vue'
-import { getUserExpenseTotal } from '@/api/expenseStatistics'
+import { getActiveApprovalApplications, getExpenseCardSummary, getPaidExpenseApplications } from '@/api/expenseStatistics'
 import { expenseApplicationsAPI } from '@/api/expenseApplications'
 import { useUserStore } from '@/stores/user'
 
@@ -513,8 +504,8 @@ const approvedExpense = ref(0)
 const approvedCount = ref(0)
 const approvingExpense = ref(0)
 const approvingCount = ref(0)
-const pendingExpense = ref(0)
-const pendingCount = ref(0)
+const paymentPendingExpense = ref(0)
+const paymentPendingCount = ref(0)
 
 // 日期格式化
 const todayDate = ref('')
@@ -549,10 +540,75 @@ const formatAmount = (amount) => {
   })
 }
 
+const isFinanceApprovalNode = (node) => {
+  const nodeName = String(node?.node_name || node?.nodeName || '').toLowerCase()
+  return nodeName.includes('财务') ||
+    nodeName.includes('出款') ||
+    nodeName.includes('付款') ||
+    nodeName.includes('支付') ||
+    nodeName.includes('finance')
+}
 
-// 获取日期字符串
+const getCurrentApprovalNode = (item) => {
+  if (!item) return null
+  return item.approvalNode || item.approval_node || null
+}
+
+const getBusinessStatus = (status, item = null) => {
+  const node = getCurrentApprovalNode(item)
+  const nodeStatus = node?.status
+  const waitingOnCurrentNode = ['pending', 'approving'].includes(nodeStatus) || ['pending', 'approving'].includes(status)
+  if (waitingOnCurrentNode) {
+    return isFinanceApprovalNode(node) ? 'payment_pending' : 'approving'
+  }
+  return status
+}
+
+const sumAmount = (items = []) => items.reduce((sum, item) => sum + parseFloat(item.amount || 0), 0)
+
+
+// 获取本地日期字符串，避免 toISOString 按 UTC 导致日期偏移
 const getDateString = (date) => {
-  return date.toISOString().split('T')[0]
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+const parseLocalDate = (dateString) => {
+  if (!dateString) return null
+  const [year, month, day] = dateString.split('-').map(Number)
+  return new Date(year, month - 1, day)
+}
+
+const getLocalDayRange = (dateString) => {
+  const date = typeof dateString === 'string' ? parseLocalDate(dateString) : dateString
+  const start = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0)
+  const end = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999)
+  return {
+    startAt: start.toISOString(),
+    endAt: end.toISOString()
+  }
+}
+
+const getLocalDateRange = (startDate, endDate) => {
+  const start = parseLocalDate(startDate)
+  const end = parseLocalDate(endDate)
+  return {
+    startAt: new Date(start.getFullYear(), start.getMonth(), start.getDate(), 0, 0, 0, 0).toISOString(),
+    endAt: new Date(end.getFullYear(), end.getMonth(), end.getDate(), 23, 59, 59, 999).toISOString()
+  }
+}
+
+const buildPaidExpenseParams = (startAt, endAt) => {
+  const params = { startAt, endAt }
+  if (props.userName) {
+    params.userName = props.userName
+  }
+  if (props.mainCategory) {
+    params.mainCategory = props.mainCategory
+  }
+  return params
 }
 
 // 加载数据
@@ -581,149 +637,37 @@ const loadData = async () => {
       endDate = endDate || getDateString(today)
     }
     
-    // 获取总支出
-    const totalParams = {
-      startDate: startDate,
-      endDate: endDate
+    // 支出只统计财务最终付款通过的订单，并按财务审批完成时间归属日期
+    const totalRange = getLocalDateRange(startDate, endDate)
+    const yesterdayRange = getLocalDayRange(yesterday)
+    const todayRange = getLocalDayRange(today)
+    
+    const summaryParams = {
+      startAt: totalRange.startAt,
+      endAt: totalRange.endAt,
+      yesterdayStartAt: yesterdayRange.startAt,
+      yesterdayEndAt: yesterdayRange.endAt,
+      todayStartAt: todayRange.startAt,
+      todayEndAt: todayRange.endAt,
+      mainCategory: props.mainCategory || undefined,
+      userName: props.userName || undefined
     }
-    
-    if (props.userName) {
-      totalParams.userName = props.userName
-    }
-    
-    if (props.mainCategory) {
-      totalParams.mainCategory = props.mainCategory
-    }
-    
-    // 获取昨日支出
-    const yesterdayParams = {
-      startDate: getDateString(yesterday),
-      endDate: getDateString(yesterday)
-    }
-    
-    if (props.userName) {
-      yesterdayParams.userName = props.userName
-    }
-    
-    if (props.mainCategory) {
-      yesterdayParams.mainCategory = props.mainCategory
-    }
-    
-    // 获取今日支出
-    const todayParams = {
-      startDate: getDateString(today),
-      endDate: getDateString(today)
-    }
-    
-    if (props.userName) {
-      todayParams.userName = props.userName
-    }
-    
-    if (props.mainCategory) {
-      todayParams.mainCategory = props.mainCategory
-    }
-    
-    // 并行请求所有数据
-    const [totalRes, yesterdayRes, todayRes] = await Promise.all([
-      getUserExpenseTotal(totalParams),
-      getUserExpenseTotal(yesterdayParams),
-      getUserExpenseTotal(todayParams)
-    ])
-    
-    // 计算总支出
-    if (totalRes.success) {
-      const totalData = totalRes.data || []
-      totalExpense.value = totalData.reduce((sum, item) => {
-        return sum + parseFloat(item.total_amount || item.totalAmount || item.amount || 0)
-      }, 0)
-      totalCount.value = totalData.reduce((sum, item) => {
-        return sum + parseInt(item.application_count || item.applicationCount || 0)
-      }, 0)
-    }
-    
-    // 计算昨日支出
-    if (yesterdayRes.success) {
-      const yesterdayData = yesterdayRes.data || []
-      yesterdayExpense.value = yesterdayData.reduce((sum, item) => {
-        return sum + parseFloat(item.total_amount || item.totalAmount || item.amount || 0)
-      }, 0)
-      yesterdayCount.value = yesterdayData.reduce((sum, item) => {
-        return sum + parseInt(item.application_count || item.applicationCount || 0)
-      }, 0)
-    }
-    
-    // 计算今日支出
-    if (todayRes.success) {
-      const todayData = todayRes.data || []
-      todayExpense.value = todayData.reduce((sum, item) => {
-        return sum + parseFloat(item.total_amount || item.totalAmount || item.amount || 0)
-      }, 0)
-      todayCount.value = todayData.reduce((sum, item) => {
-        return sum + parseInt(item.application_count || item.applicationCount || 0)
-      }, 0)
-    }
-    
-    // 获取审批状态统计数据
-    // 如果没有设置日期范围，使用最近一年
-    const statusStartDate = props.startDate || getDateString(oneYearAgo)
-    const statusEndDate = props.endDate || getDateString(today)
-    
-    // 根据用户权限选择API：如果有全部数据权限，使用getAllExpenseApplicationsList获取所有用户的数据
-    // 否则使用getExpenseApplicationsList只获取当前用户的数据
-    const apiMethod = hasAllDataPermission.value 
-      ? expenseApplicationsAPI.getAllExpenseApplicationsList 
-      : expenseApplicationsAPI.getExpenseApplicationsList
-    
-    // 并行请求不同状态的费用申请
-    const [approvedRes, approvingRes, pendingRes] = await Promise.all([
-      apiMethod({
-        status: 'approved',
-        start_date: statusStartDate,
-        end_date: statusEndDate,
-        page: 1,
-        pageSize: 10000 // 获取所有数据用于统计
-      }),
-      apiMethod({
-        status: 'approving',
-        start_date: statusStartDate,
-        end_date: statusEndDate,
-        page: 1,
-        pageSize: 10000
-      }),
-      apiMethod({
-        status: 'pending',
-        start_date: statusStartDate,
-        end_date: statusEndDate,
-        page: 1,
-        pageSize: 10000
-      })
-    ])
-    
-    // 计算已支出（已审批通过）
-    if (approvedRes.success) {
-      const approvedData = approvedRes.data || []
-      approvedExpense.value = approvedData.reduce((sum, item) => {
-        return sum + parseFloat(item.amount || 0)
-      }, 0)
-      approvedCount.value = approvedRes.pagination?.total || approvedData.length
-    }
-    
-    // 计算审批中
-    if (approvingRes.success) {
-      const approvingData = approvingRes.data || []
-      approvingExpense.value = approvingData.reduce((sum, item) => {
-        return sum + parseFloat(item.amount || 0)
-      }, 0)
-      approvingCount.value = approvingRes.pagination?.total || approvingData.length
-    }
-    
-    // 计算待审批
-    if (pendingRes.success) {
-      const pendingData = pendingRes.data || []
-      pendingExpense.value = pendingData.reduce((sum, item) => {
-        return sum + parseFloat(item.amount || 0)
-      }, 0)
-      pendingCount.value = pendingRes.pagination?.total || pendingData.length
+
+    const summaryRes = await getExpenseCardSummary(summaryParams)
+    if (summaryRes.success) {
+      const summary = summaryRes.data || {}
+      totalExpense.value = summary.total?.amount || 0
+      totalCount.value = summary.total?.count || 0
+      yesterdayExpense.value = summary.yesterday?.amount || 0
+      yesterdayCount.value = summary.yesterday?.count || 0
+      todayExpense.value = summary.today?.amount || 0
+      todayCount.value = summary.today?.count || 0
+      approvedExpense.value = summary.approved?.amount || 0
+      approvedCount.value = summary.approved?.count || 0
+      approvingExpense.value = summary.approving?.amount || 0
+      approvingCount.value = summary.approving?.count || 0
+      paymentPendingExpense.value = summary.paymentPending?.amount || 0
+      paymentPendingCount.value = summary.paymentPending?.count || 0
     }
     
   } catch (error) {
@@ -746,7 +690,7 @@ const getStatusTitle = (status) => {
   const titles = {
     approved: '已支出订单列表',
     approving: '审批中订单列表',
-    pending: '待审批订单列表'
+    payment_pending: '待付款订单列表'
   }
   return titles[status] || '订单列表'
 }
@@ -778,7 +722,51 @@ const loadStatusList = async () => {
     
     const statusStartDate = props.startDate || getDateString(oneYearAgo)
     const statusEndDate = props.endDate || getDateString(today)
+    const statusRange = getLocalDateRange(statusStartDate, statusEndDate)
+
+    // 已支出列表按财务付款完成时间统计
+    if (currentStatus.value === 'approved') {
+      const response = await getPaidExpenseApplications(buildPaidExpenseParams(statusRange.startAt, statusRange.endAt))
+
+      if (response.success) {
+        const paidData = response.data || []
+        statusListTotal.value = paidData.length
+        statusListTotalPages.value = Math.ceil(statusListTotal.value / statusListPageSize.value)
+        const start = (statusListPage.value - 1) * statusListPageSize.value
+        statusListData.value = paidData.slice(start, start + statusListPageSize.value)
+      } else {
+        statusListData.value = []
+        statusListTotal.value = 0
+        statusListTotalPages.value = 0
+      }
+      return
+    }
     
+    // 当前待处理状态需要根据审批节点区分审批中/待付款
+    if (['approving', 'payment_pending'].includes(currentStatus.value)) {
+      const response = await getActiveApprovalApplications({
+        page: 1,
+        pageSize: 10000,
+        mainCategory: props.mainCategory || undefined,
+        userName: props.userName || undefined
+      })
+
+      if (response.success) {
+        const filteredData = currentStatus.value === 'payment_pending'
+          ? (response.data || []).filter(item => getBusinessStatus(item.status, item) === 'payment_pending')
+          : (response.data || [])
+        statusListTotal.value = filteredData.length
+        statusListTotalPages.value = Math.ceil(statusListTotal.value / statusListPageSize.value)
+        const start = (statusListPage.value - 1) * statusListPageSize.value
+        statusListData.value = filteredData.slice(start, start + statusListPageSize.value)
+      } else {
+        statusListData.value = []
+        statusListTotal.value = 0
+        statusListTotalPages.value = 0
+      }
+      return
+    }
+
     // 根据用户权限选择API
     const apiMethod = hasAllDataPermission.value 
       ? expenseApplicationsAPI.getAllExpenseApplicationsList 
@@ -897,27 +885,31 @@ const closeExpenseDetailModal = () => {
 }
 
 // 获取状态文本
-const getStatusText = (status) => {
+const getStatusText = (status, item = null) => {
+  const businessStatus = getBusinessStatus(status, item)
   const statusMap = {
     pending: '待审批',
     approving: '审批中',
+    payment_pending: '待付款',
     approved: '已通过',
     rejected: '已拒绝',
     cancelled: '已取消'
   }
-  return statusMap[status] || status
+  return statusMap[businessStatus] || businessStatus
 }
 
 // 获取状态样式
-const getStatusClass = (status) => {
+const getStatusClass = (status, item = null) => {
+  const businessStatus = getBusinessStatus(status, item)
   const classMap = {
     pending: 'px-3 py-1 rounded-full text-xs font-semibold bg-yellow-500/20 text-yellow-400',
     approving: 'px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/20 text-blue-400',
+    payment_pending: 'px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-400',
     approved: 'px-3 py-1 rounded-full text-xs font-semibold bg-green-500/20 text-green-400',
     rejected: 'px-3 py-1 rounded-full text-xs font-semibold bg-red-500/20 text-red-400',
     cancelled: 'px-3 py-1 rounded-full text-xs font-semibold bg-gray-500/20 text-gray-400'
   }
-  return classMap[status] || 'px-3 py-1 rounded-full text-xs font-semibold bg-gray-500/20 text-gray-400'
+  return classMap[businessStatus] || 'px-3 py-1 rounded-full text-xs font-semibold bg-gray-500/20 text-gray-400'
 }
 
 // 格式化日期
@@ -945,10 +937,34 @@ const formatDateTime = (dateStr) => {
 }
 
 // 获取审批节点状态文本颜色
-const getApprovalNodeTextColor = (status) => {
+const getApprovalNodeBusinessStatus = (node) => {
+  if (!node) return ''
+  if (['pending', 'approving'].includes(node.status) && isFinanceApprovalNode(node)) {
+    return 'payment_pending'
+  }
+  return node.status || (node.is_current_node ? 'approving' : 'pending')
+}
+
+const getApprovalNodeText = (node) => {
+  if (isTimeoutRejection(node)) return '审核超时'
+  const statusMap = {
+    pending: '待审批',
+    approving: '审批中',
+    payment_pending: '待付款',
+    approved: '已通过',
+    rejected: '已拒绝',
+    auto_approved: '自动审批'
+  }
+  const businessStatus = getApprovalNodeBusinessStatus(node)
+  return statusMap[businessStatus] || '待审批'
+}
+
+const getApprovalNodeTextColor = (node) => {
+  const status = getApprovalNodeBusinessStatus(node)
   const colorMap = {
     pending: 'text-yellow-300',
     approving: 'text-blue-300',
+    payment_pending: 'text-emerald-300',
     approved: 'text-green-300',
     rejected: 'text-red-300',
     auto_approved: 'text-purple-300'
@@ -957,10 +973,12 @@ const getApprovalNodeTextColor = (status) => {
 }
 
 // 获取审批节点状态样式
-const getApprovalNodeStatusClass = (status) => {
+const getApprovalNodeStatusClass = (node) => {
+  const status = getApprovalNodeBusinessStatus(node)
   const statusMap = {
     pending: 'bg-gradient-to-r from-yellow-400/80 to-orange-400/80',
     approving: 'bg-gradient-to-r from-blue-500/80 to-cyan-500/80',
+    payment_pending: 'bg-gradient-to-r from-emerald-500/80 to-teal-500/80',
     approved: 'bg-gradient-to-r from-emerald-500/80 to-green-500/80',
     rejected: 'bg-gradient-to-r from-red-500/80 to-rose-500/80',
     auto_approved: 'bg-gradient-to-r from-purple-500/80 to-indigo-500/80'
@@ -969,10 +987,12 @@ const getApprovalNodeStatusClass = (status) => {
 }
 
 // 获取审批节点图标
-const getApprovalNodeIcon = (status) => {
+const getApprovalNodeIcon = (node) => {
+  const status = getApprovalNodeBusinessStatus(node)
   const iconMap = {
     pending: 'fas fa-clock',
     approving: 'fas fa-spinner',
+    payment_pending: 'fas fa-wallet',
     approved: 'fas fa-check',
     rejected: 'fas fa-times',
     auto_approved: 'fas fa-robot'

@@ -98,7 +98,8 @@
               class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary/50 transition-all duration-300 hover:bg-white/15"
             >
               <option value="" class="bg-slate-800">所有状态</option>
-              <option value="pending" class="bg-slate-800">待审批</option>
+              <option value="payment_pending" class="bg-slate-800">待付款</option>
+              <option value="approval_pending" class="bg-slate-800">待审批</option>
               <option value="approved" class="bg-slate-800">已批准</option>
               <option value="rejected" class="bg-slate-800">已拒绝</option>
             </select>
@@ -703,23 +704,14 @@
                 <div v-for="(node, index) in mockApprovalNodes" :key="index" 
                      class="flex items-start justify-between py-4 border-b border-white/10 last:border-b-0 hover:bg-white/5 transition-all duration-200 px-3">
                   <div class="flex items-start space-x-4 flex-1">
-                    <div class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" :class="getApprovalNodeStatusClass(node.status)">
-                      <i :class="getApprovalNodeIcon(node.status)" class="text-white text-sm"></i>
+                    <div class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" :class="getApprovalNodeStatusClass(node)">
+                      <i :class="getApprovalNodeIcon(node)" class="text-white text-sm"></i>
                     </div>
                     <div class="flex-1 min-w-0">
                       <div class="flex items-center space-x-3 mb-1">
                         <div class="text-white font-medium text-sm">{{ node.nodeName || node.node_name || '审批节点' }}</div>
-                        <div class="font-medium text-xs px-2 py-0.5 rounded" :class="getApprovalNodeTextColor(node.status)">
-                          <span v-if="node.status === 'pending'">待审批</span>
-                          <span v-else-if="node.status === 'approving'">审批中</span>
-                          <span v-else-if="node.status === 'approved'">已通过</span>
-                          <span v-else-if="node.status === 'rejected'">
-                            <span v-if="isTimeoutRejection(node)">审核超时</span>
-                            <span v-else>已拒绝</span>
-                          </span>
-                          <span v-else-if="node.status === 'auto_approved'">自动审批</span>
-                          <span v-else-if="node.is_current_node">审批中……</span>
-                          <span v-else>待审批</span>
+                        <div class="font-medium text-xs px-2 py-0.5 rounded" :class="getApprovalNodeTextColor(node)">
+                          {{ getApprovalNodeText(node) }}
                         </div>
                       </div>
                       <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-gray-400 mb-2">
@@ -876,7 +868,7 @@ const filteredApprovals = computed(() => {
       item.applicant.name.toLowerCase().includes(searchKeyword.value.toLowerCase()) ||
       item.applicant.department.toLowerCase().includes(searchKeyword.value.toLowerCase())
     
-    const matchesStatus = !statusFilter.value || item.status === statusFilter.value
+    const matchesStatus = !statusFilter.value || getBusinessStatus(item.status, item) === statusFilter.value
     const matchesType = !typeFilter.value || item.type === typeFilter.value
     const matchesMainCategory = !selectedMainCategory.value || item.mainCategoryId === selectedMainCategory.value
     const matchesSubCategory = !selectedSubCategory.value || item.subCategoryId === selectedSubCategory.value
@@ -1554,9 +1546,34 @@ const onMainCategoryChange = () => {
   }
 }
 
-const getApprovalNodeTextColor = (status) => {
+const getApprovalNodeBusinessStatus = (node) => {
+  if (!node) return ''
+  if (['pending', 'approving'].includes(node.status) && isFinanceApprovalNode(node)) {
+    return 'payment_pending'
+  }
+  return node.status || (node.is_current_node ? 'approving' : 'pending')
+}
+
+const getApprovalNodeText = (node) => {
+  if (isTimeoutRejection(node)) return '审核超时'
+  const textMap = {
+    pending: '待审批',
+    approving: '审批中',
+    payment_pending: '待付款',
+    approved: '已通过',
+    rejected: '已拒绝',
+    auto_approved: '自动审批'
+  }
+  const businessStatus = getApprovalNodeBusinessStatus(node)
+  return textMap[businessStatus] || '待审批'
+}
+
+const getApprovalNodeTextColor = (node) => {
+  const status = getApprovalNodeBusinessStatus(node)
   const colorMap = {
     pending: 'text-yellow-600',
+    approving: 'text-blue-600',
+    payment_pending: 'text-emerald-600',
     approved: 'text-green-600',
     rejected: 'text-red-600',
     auto_approved: 'text-blue-600'
@@ -1564,9 +1581,12 @@ const getApprovalNodeTextColor = (status) => {
   return colorMap[status] || 'text-gray-600'
 }
 
-const getApprovalNodeStatusClass = (status) => {
+const getApprovalNodeStatusClass = (node) => {
+  const status = getApprovalNodeBusinessStatus(node)
   const classMap = {
     pending: 'bg-yellow-100 text-yellow-600',
+    approving: 'bg-blue-100 text-blue-600',
+    payment_pending: 'bg-emerald-100 text-emerald-600',
     approved: 'bg-green-100 text-green-600',
     rejected: 'bg-red-100 text-red-600',
     auto_approved: 'bg-blue-100 text-blue-600'
@@ -1574,9 +1594,12 @@ const getApprovalNodeStatusClass = (status) => {
   return classMap[status] || 'bg-gray-100 text-gray-600'
 }
 
-const getApprovalNodeIcon = (status) => {
+const getApprovalNodeIcon = (node) => {
+  const status = getApprovalNodeBusinessStatus(node)
   const iconMap = {
     pending: 'fas fa-clock',
+    approving: 'fas fa-spinner',
+    payment_pending: 'fas fa-wallet',
     approved: 'fas fa-check',
     rejected: 'fas fa-times',
     auto_approved: 'fas fa-robot'
