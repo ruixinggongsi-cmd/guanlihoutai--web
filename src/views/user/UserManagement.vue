@@ -63,7 +63,7 @@
             >
               <option value="" class="bg-slate-800 text-white">全部部门</option>
               <option v-for="dept in departmentOptions" :key="dept.id" :value="dept.id" class="bg-slate-800 text-white">
-                {{ dept.department_name }}
+                {{ dept.label }}
               </option>
             </select>
           </div>
@@ -317,7 +317,7 @@
                 >
                   <option value="" class="bg-slate-800 text-white">请选择部门</option>
                   <option v-for="dept in departmentOptions" :key="dept.id" :value="dept.id" class="bg-slate-800 text-white">
-                    {{ dept.department_name }}
+                    {{ dept.label }}
                   </option>
                 </select>
               </div>
@@ -710,12 +710,31 @@ const closeModal = () => {
   resetUserForm()
 }
 
+const flattenDepartmentTree = (nodes = [], depth = 0) => {
+  const result = []
+  nodes.forEach((node) => {
+    const name = node.department_name || node.name || '未知部门'
+    const prefix = depth > 0 ? `${'　'.repeat(depth)}└ ` : ''
+    result.push({
+      id: node.id,
+      department_name: name,
+      label: `${prefix}${name}`,
+      parent_id: node.parent_id || node.parentId || null,
+      depth
+    })
+    if (Array.isArray(node.children) && node.children.length > 0) {
+      result.push(...flattenDepartmentTree(node.children, depth + 1))
+    }
+  })
+  return result
+}
+
 // 获取部门选项
 const fetchDepartmentOptions = async () => {
   try {
-    const response = await departmentAPI.getDepartmentOptions()
+    const response = await departmentAPI.getDepartmentTree()
     if (response.success && response.data) {
-      departmentOptions.value = response.data
+      departmentOptions.value = flattenDepartmentTree(response.data)
     }
   } catch (error) {
     ElMessage.error({message: '获取部门选项失败', duration: 1000})

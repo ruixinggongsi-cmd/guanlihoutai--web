@@ -671,17 +671,41 @@
               <i class="fas fa-hand-pointer text-base mb-1"></i>
               <p class="text-xs">请先选择主分类</p>
             </div>
-             <div class="grid grid-cols-3 gap-4">
+             <div class="grid grid-cols-4 gap-4">
             <div>
-              <label class="block text-sm font-medium text-gray-400 mb-2">金额 <span class="text-danger">*</span></label>
+              <label class="block text-sm font-medium text-gray-400 mb-2">单价 <span class="text-danger">*</span></label>
               <input 
-                v-model.number="expenseForm.amount"
+                v-model.number="expenseForm.unitPrice"
                 type="number" 
                 step="0.01"
                 min="0"
                 required
                 class="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all duration-300"
-                placeholder="请输入金额"
+                placeholder="请输入单价"
+              >
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-400 mb-2">数量 <span class="text-danger">*</span></label>
+              <input
+                v-model.number="expenseForm.quantity"
+                type="number"
+                step="1"
+                min="1"
+                required
+                class="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all duration-300"
+                placeholder="请输入数量"
+              >
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-400 mb-2">总金额 <span class="text-danger">*</span></label>
+              <input
+                :value="calculatedExpenseAmount"
+                type="number"
+                step="0.01"
+                min="0"
+                readonly
+                class="w-full px-4 py-2 bg-white/5 border border-white/20 rounded-xl text-emerald-300 placeholder-gray-400 focus:outline-none transition-all duration-300 cursor-not-allowed"
+                placeholder="自动计算"
               >
             </div>
 
@@ -694,6 +718,7 @@
                 class="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all duration-300"
               >
             </div>
+            </div>
              <div>
               <label class="block text-sm font-medium text-gray-400 mb-2">付款方式 <span class="text-danger">*</span></label>
               <select name="paymentMethod" v-model="expenseForm.paymentMethod" class="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all duration-300">
@@ -703,7 +728,6 @@
                 <option value="USDT">USDT</option>
                 <option value="其他">其他</option>
               </select>
-            </div>
             </div>
              <div class="grid grid-cols-3 gap-4">
             <div>
@@ -894,6 +918,8 @@ const expenseForm = ref({
   name: '',
   mainCategoryId: '',
   subCategoryId: '',
+  unitPrice: '',
+  quantity: 1,
   amount: '',
   date: new Date().toISOString().split('T')[0],
   description: '',
@@ -906,6 +932,13 @@ const expenseForm = ref({
 // 计算属性
 const totalExpenses = computed(() => {
   return filteredExpenses.value.reduce((sum, expense) => sum + expense.amount, 0)
+})
+
+const calculatedExpenseAmount = computed(() => {
+  const unitPrice = parseFloat(expenseForm.value.unitPrice || 0)
+  const quantity = parseFloat(expenseForm.value.quantity || 0)
+  if (!unitPrice || !quantity) return ''
+  return Number((unitPrice * quantity).toFixed(2))
 })
 
 // 获取子分类（计算属性）- 使用expense_categories.js接口的子分类获取功能
@@ -1405,10 +1438,16 @@ const showAddExpenseModal = () => {
     name: '',
     mainCategoryId: '',
     subCategoryId: '',
+    unitPrice: '',
+    quantity: 1,
     amount: '',
     date: new Date().toISOString().split('T')[0],
     description: '',
-    status: 'pending'
+    status: 'pending',
+    paymentMethod: '',
+    payeeName: '',
+    accountName: '',
+    accountType: ''
   }
   // 重置分类选择
   selectedMainCategory.value = null
@@ -1538,7 +1577,8 @@ const cancelExpenseApplication = async () => {
 // }
 
 const saveExpense = async () => {
-  if (!expenseForm.value.name.trim() || !expenseForm.value.mainCategoryId || !expenseForm.value.subCategoryId || !expenseForm.value.amount) {
+  const totalAmount = calculatedExpenseAmount.value
+  if (!expenseForm.value.name.trim() || !expenseForm.value.mainCategoryId || !expenseForm.value.subCategoryId || !totalAmount) {
     ElMessage.error({
       message: '请填写完整信息',
       duration: 1000
@@ -1562,9 +1602,9 @@ const saveExpense = async () => {
       name: expenseForm.value.name,
       main_category_id: expenseForm.value.mainCategoryId,
       sub_category_id: expenseForm.value.subCategoryId,
-      amount: parseFloat(expenseForm.value.amount),
+      amount: parseFloat(totalAmount),
       date: expenseForm.value.date,
-      description: expenseForm.value.description || '',
+      description: expenseForm.value.description || `单价：${expenseForm.value.unitPrice}，数量：${expenseForm.value.quantity}`,
       applicant_id: userStore.userInfo?.id,
       applicant_name: userStore.userInfo?.name,
       applicant_department_id: userStore.userInfo?.department_id,
@@ -1609,6 +1649,8 @@ const closeExpenseModal = () => {
     name: '',
     mainCategoryId: '',
     subCategoryId: '',
+    unitPrice: '',
+    quantity: 1,
     amount: '',
     date: new Date().toISOString().split('T')[0],
     description: '',
