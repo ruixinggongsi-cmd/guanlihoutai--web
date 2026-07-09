@@ -216,9 +216,9 @@
                   <div class="text-sm text-white">{{ approval.amount.toLocaleString() }}</div>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap">
-                  <span :class="getStatusClass(approval.status)" class="px-3 py-1 text-xs font-medium rounded-full">
-                    <i :class="getStatusIcon(approval.status)" class="mr-1"></i>
-                    {{ getStatusText(approval.status) }}
+                  <span :class="getStatusClass(approval.status, approval)" class="px-3 py-1 text-xs font-medium rounded-full">
+                    <i :class="getStatusIcon(approval.status, approval)" class="mr-1"></i>
+                    {{ getStatusText(approval.status, approval) }}
                   </span>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-400">{{ formatDate(approval.date) }}</td>
@@ -548,9 +548,9 @@
                       状态
                     </label>
                     <div class="max-w-xs text-right">
-                      <span :class="viewingExpense ? getStatusClass(viewingExpense.status) : ''" class="inline-flex items-center gap-2 px-3 py-1 rounded-lg text-sm font-medium">
-                        <i v-if="viewingExpense" :class="getStatusIcon(viewingExpense.status)"></i>
-                        {{ viewingExpense ? getStatusText(viewingExpense.status) : '-' }}
+                      <span :class="viewingExpense ? getStatusClass(viewingExpense.status, viewingExpense) : ''" class="inline-flex items-center gap-2 px-3 py-1 rounded-lg text-sm font-medium">
+                        <i v-if="viewingExpense" :class="getStatusIcon(viewingExpense.status, viewingExpense)"></i>
+                        {{ viewingExpense ? getStatusText(viewingExpense.status, viewingExpense) : '-' }}
                       </span>
                     </div>
                   </div>
@@ -1451,34 +1451,68 @@ const closeViewModal = () => {
   viewingExpense.value = null
 }
 
-const getStatusClass = (status) => {
+const isFinanceApprovalNode = (node) => {
+  const nodeName = String(node?.node_name || node?.nodeName || node?.node_name || '').toLowerCase()
+  return nodeName.includes('财务') ||
+    nodeName.includes('出款') ||
+    nodeName.includes('付款') ||
+    nodeName.includes('支付') ||
+    nodeName.includes('finance')
+}
+
+const getCurrentApprovalNode = (item) => {
+  if (!item) return null
+  if (item.approvalNode) return item.approvalNode
+  return null
+}
+
+const getBusinessStatus = (status, item = null) => {
+  const node = getCurrentApprovalNode(item)
+  const nodeStatus = node?.status
+  const waitingOnCurrentNode = ['pending', 'approving'].includes(nodeStatus) || ['pending', 'approving'].includes(status)
+  if (waitingOnCurrentNode) {
+    return isFinanceApprovalNode(node) ? 'payment_pending' : 'approval_pending'
+  }
+  return status
+}
+
+const getStatusClass = (status, item = null) => {
+  const businessStatus = getBusinessStatus(status, item)
   const classes = {
+    payment_pending: 'bg-emerald-100 text-emerald-800',
+    approval_pending: 'bg-yellow-100 text-yellow-800',
     pending: 'bg-yellow-100 text-yellow-800',
     approved: 'bg-green-100 text-green-800',
     rejected: 'bg-red-100 text-red-800',
     approving: 'bg-blue-100 text-blue-800'
   }
-  return classes[status] || 'bg-gray-100 text-gray-800'
+  return classes[businessStatus] || 'bg-gray-100 text-gray-800'
 }
 
-const getStatusText = (status) => {
+const getStatusText = (status, item = null) => {
+  const businessStatus = getBusinessStatus(status, item)
   const texts = {
+    payment_pending: '待付款',
+    approval_pending: '待审批',
     pending: '待审批',
     approved: '已批准',
     rejected: '已拒绝',
     approving: '审批中'
   }
-  return texts[status] || status
+  return texts[businessStatus] || businessStatus
 }
 
-const getStatusIcon = (status) => {
+const getStatusIcon = (status, item = null) => {
+  const businessStatus = getBusinessStatus(status, item)
   const iconMap = {
+    payment_pending: 'fas fa-wallet',
+    approval_pending: 'fas fa-clock',
     pending: 'fas fa-clock',
     approved: 'fas fa-check-circle',
     rejected: 'fas fa-times-circle',
     approving: 'fas fa-spinner fa-spin'
   }
-  return iconMap[status] || 'fas fa-question-circle'
+  return iconMap[businessStatus] || 'fas fa-question-circle'
 }
 
 const getExpenseTypeText = (type) => {
