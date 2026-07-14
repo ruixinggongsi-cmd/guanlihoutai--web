@@ -661,9 +661,13 @@ const loadDepartmentTree = async () => {
 
 // 排序相关
 const sortConfig = reactive({
-  field: 'progress_time', // 当前排序字段
+  field: 'created_at', // 当前排序字段
   order: 'desc' // 'asc' 或 'desc'
 })
+
+const sortByCreatedAtDesc = (rows = []) => {
+  return [...rows].sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+}
 
 const getDateString = (date) => {
   const year = date.getFullYear()
@@ -719,7 +723,7 @@ const loadData = async () => {
       })
 
       if (paidResponse.success) {
-        const paidData = paidResponse.data || []
+        const paidData = sortByCreatedAtDesc(paidResponse.data || [])
         pagination.total = paidData.length
         pagination.totalPages = Math.ceil(pagination.total / pagination.pageSize)
         const start = (pagination.page - 1) * pagination.pageSize
@@ -744,7 +748,7 @@ const loadData = async () => {
         const startTime = new Date(startAt).getTime()
         const endTime = new Date(endAt).getTime()
         const keyword = String(filters.keyword || '').toLowerCase()
-        const paymentPendingData = (activeResponse.data || []).filter((item) => {
+        const paymentPendingData = sortByCreatedAtDesc((activeResponse.data || []).filter((item) => {
           const businessStatus = getBusinessStatus(item.status, item)
           const progressTime = new Date(getProgressTime(item) || 0).getTime()
           const matchesTime = progressTime >= startTime && progressTime <= endTime
@@ -755,7 +759,7 @@ const loadData = async () => {
             item.applicant_info?.department === filters.departmentId ||
             item.applicant_department_id === filters.departmentId
           return businessStatus === 'payment_pending' && matchesTime && matchesKeyword && matchesDepartment
-        })
+        }))
         pagination.total = paymentPendingData.length
         pagination.totalPages = Math.ceil(pagination.total / pagination.pageSize)
         const start = (pagination.page - 1) * pagination.pageSize
@@ -800,7 +804,7 @@ const loadData = async () => {
             item.applicant_department_id === filters.departmentId
           return matchesTime && matchesKeyword && matchesDepartment
         })
-        const combinedData = [...(paidResponse.data || []), ...activeData]
+        const combinedData = sortByCreatedAtDesc([...(paidResponse.data || []), ...activeData])
         pagination.total = combinedData.length
         pagination.totalPages = Math.ceil(pagination.total / pagination.pageSize)
         const start = (pagination.page - 1) * pagination.pageSize
