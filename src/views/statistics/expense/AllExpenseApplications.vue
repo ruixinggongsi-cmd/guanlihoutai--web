@@ -23,7 +23,7 @@
 
     <div v-else>
       <!-- 筛选条件 -->
-      <div class="mb-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div class="mb-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-4">
         <div>
           <label class="block text-sm font-semibold text-gray-300 mb-2">
             <i class="fas fa-filter mr-2"></i>状态筛选
@@ -59,6 +59,47 @@
               class="bg-slate-800"
             >
               {{ opt.label }}
+            </option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-300 mb-2">
+            <i class="fas fa-tag mr-2"></i>主分类
+          </label>
+          <select
+            v-model="filters.mainCategoryId"
+            @change="handleMainCategoryChange"
+            class="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-primary"
+          >
+            <option value="" class="bg-slate-800">全部分类</option>
+            <option
+              v-for="category in mainCategories"
+              :key="category.id"
+              :value="category.id"
+              class="bg-slate-800"
+            >
+              {{ category.category_name || category.name }}
+            </option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-300 mb-2">
+            <i class="fas fa-folder mr-2"></i>子分类
+          </label>
+          <select
+            v-model="filters.subCategoryId"
+            @change="handleSearch"
+            :disabled="!filters.mainCategoryId"
+            class="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+          >
+            <option value="" class="bg-slate-800">全部子分类</option>
+            <option
+              v-for="category in availableSubCategories"
+              :key="category.id"
+              :value="category.id"
+              class="bg-slate-800"
+            >
+              {{ category.category_name || category.name }}
             </option>
           </select>
         </div>
@@ -596,6 +637,7 @@ import { ref, reactive, computed, watch, onMounted, Teleport } from 'vue'
 import { expenseApplicationsAPI } from '@/api/expenseApplications'
 import { getActiveApprovalApplications, getPaidExpenseApplications } from '@/api/expenseStatistics'
 import { getDepartmentTree } from '@/api/department'
+import { getMainCategoriesList } from '@/api/expense'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const props = defineProps({
@@ -604,6 +646,10 @@ const props = defineProps({
     default: ''
   },
   endDate: {
+    type: String,
+    default: ''
+  },
+  mainCategory: {
     type: String,
     default: ''
   }
@@ -629,11 +675,19 @@ const pagination = reactive({
 const filters = reactive({
   status: 'all',
   departmentId: '',
+  mainCategoryId: '',
+  subCategoryId: '',
   applicantName: '',
   keyword: ''
 })
 
 const flatDepartmentOptions = ref([])
+const mainCategories = ref([])
+const subCategories = ref([])
+const availableSubCategories = computed(() => {
+  if (!filters.mainCategoryId) return []
+  return subCategories.value.filter((category) => category.parent_id === filters.mainCategoryId)
+})
 
 const flattenDepartmentTree = (nodes, depth = 0) => {
   const result = []
@@ -658,6 +712,31 @@ const loadDepartmentTree = async () => {
     console.error('[所有申请记录] 加载部门树失败:', e)
   }
 }
+
+const loadExpenseCategories = async () => {
+  try {
+    const res = await getMainCategoriesList()
+    if (res.success || res.code === 200) {
+      const categories = res.data || []
+      mainCategories.value = categories
+      subCategories.value = categories.flatMap((category) =>
+        (category.children || []).map((child) => ({
+          ...child,
+          parent_id: child.parent_id || category.id
+        }))
+      )
+    }
+  } catch (e) {
+    console.error('[所有申请记录] 加载费用分类失败:', e)
+  }
+}
+
+const getCategoryFilters = () => ({
+  mainCategory: filters.mainCategoryId || undefined,
+  mainCategoryId: filters.mainCategoryId || undefined,
+  subCategory: filters.subCategoryId || undefined,
+  subCategoryId: filters.subCategoryId || undefined
+})
 
 // 排序相关
 const sortConfig = reactive({
@@ -719,7 +798,8 @@ const loadData = async () => {
         endAt,
         keyword: filters.keyword || undefined,
         userName: filters.applicantName || undefined,
-        departmentId: filters.departmentId || undefined
+        departmentId: filters.departmentId || undefined,
+        ...getCategoryFilters()
       })
 
       if (paidResponse.success) {
@@ -740,7 +820,10 @@ const loadData = async () => {
       const activeResponse = await getActiveApprovalApplications({
         page: 1,
         pageSize: 10000,
-        userName: filters.applicantName || undefined
+        userName: filters.applicantName || undefined,
+        keyword: filters.keyword || undefined,
+        departmentId: filters.departmentId || undefined,
+        ...getCategoryFilters()
       })
 
       if (activeResponse.success) {
@@ -773,46 +856,26 @@ const loadData = async () => {
     }
 
     if (filters.status === 'all') {
-      const { startAt, endAt } = getLocalDateRange(startDate, endDate)
-      const [paidResponse, activeResponse] = await Promise.all([
-        getPaidExpenseApplications({
-          startAt,
-          endAt,
-          keyword: filters.keyword || undefined,
-          userName: filters.applicantName || undefined,
-          departmentId: filters.departmentId || undefined
-        }),
-        getActiveApprovalApplications({
-          page: 1,
-          pageSize: 10000,
-          userName: filters.applicantName || undefined
-        })
-      ])
+      const response = await expenseApplicationsAPI.getAllExpenseApplicationsList({
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+        start_date: startDate,
+        end_date: endDate,
+        keyword: filters.keyword || undefined,
+        applicant_name: filters.applicantName || undefined,
+        departmentId: filters.departmentId || undefined,
+        mainCategoryId: filters.mainCategoryId || undefined,
+        subCategoryId: filters.subCategoryId || undefined
+      })
 
-      if (paidResponse.success && activeResponse.success) {
-        const startTime = new Date(startAt).getTime()
-        const endTime = new Date(endAt).getTime()
-        const keyword = String(filters.keyword || '').toLowerCase()
-        const activeData = (activeResponse.data || []).filter((item) => {
-          const progressTime = new Date(getProgressTime(item) || 0).getTime()
-          const matchesTime = progressTime >= startTime && progressTime <= endTime
-          const matchesKeyword = !keyword ||
-            String(item.name || '').toLowerCase().includes(keyword) ||
-            String(item.description || '').toLowerCase().includes(keyword)
-          const matchesDepartment = !filters.departmentId ||
-            item.applicant_info?.department === filters.departmentId ||
-            item.applicant_department_id === filters.departmentId
-          return matchesTime && matchesKeyword && matchesDepartment
-        })
-        const combinedData = sortByCreatedAtDesc([...(paidResponse.data || []), ...activeData])
-        pagination.total = combinedData.length
-        pagination.totalPages = Math.ceil(pagination.total / pagination.pageSize)
-        const start = (pagination.page - 1) * pagination.pageSize
-        applications.value = combinedData.slice(start, start + pagination.pageSize)
+      if (response.success) {
+        applications.value = response.data || []
+        pagination.total = response.pagination?.total || 0
+        pagination.totalPages = response.pagination?.totalPages || 0
         return
       }
 
-      error.value = paidResponse.message || activeResponse.message || '获取数据失败'
+      error.value = response.message || '获取数据失败'
       emit('error', error.value)
       return
     }
@@ -825,7 +888,9 @@ const loadData = async () => {
       keyword: filters.keyword || undefined,
       status: filters.status !== 'all' ? filters.status : undefined,
       applicant_name: filters.applicantName || undefined,
-      departmentId: filters.departmentId || undefined
+      departmentId: filters.departmentId || undefined,
+      mainCategoryId: filters.mainCategoryId || undefined,
+      subCategoryId: filters.subCategoryId || undefined
     }
 
     console.log('[所有申请记录] 开始加载数据，参数:', params)
@@ -1019,6 +1084,11 @@ const handleSearch = () => {
   pagination.page = 1
   selectedIds.value = [] // 清空选择
   loadData()
+}
+
+const handleMainCategoryChange = () => {
+  filters.subCategoryId = ''
+  handleSearch()
 }
 
 // 分页变化
@@ -1306,6 +1376,7 @@ watch([() => props.startDate, () => props.endDate], () => {
 
 onMounted(() => {
   loadDepartmentTree()
+  loadExpenseCategories()
 })
 </script>
 
