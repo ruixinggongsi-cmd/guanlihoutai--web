@@ -52,6 +52,15 @@ export const expenseApplicationsAPI = {
   },
 
   /**
+   * 重新提交已拒绝/已取消的费用申请
+   * @param {string} id - 费用申请ID
+   * @param {Object} data - 更新后的费用申请数据
+   */
+  resubmitExpenseApplication(id, data) {
+    return request.post(`/expense-applications/${id}/resubmit`, data)
+  },
+
+  /**
    * 获取费用申请详情
    * @param {string} id - 费用申请ID
    */

@@ -155,11 +155,23 @@ const props = defineProps({
   },
   userName: {
     type: String,
-    required: true
+    default: ''
+  },
+  departmentId: {
+    type: String,
+    default: ''
+  },
+  applicantId: {
+    type: String,
+    default: ''
   },
   mainCategory: {
     type: String,
     default: ''
+  },
+  queryVersion: {
+    type: Number,
+    default: 0
   }
 })
 
@@ -335,7 +347,7 @@ const getChartOption = (data) => {
     })
   })
   
-  const categoryArray = Array.from(allCategories).slice(0, 8) // 限制分类数量避免图表过于复杂
+  const categoryArray = Array.from(allCategories)
   
   const xAxisData = sortedUsers.map(item => item.user_name)
   
@@ -429,8 +441,15 @@ const getChartOption = (data) => {
       }
     },
     legend: {
+      type: 'scroll',
       data: categoryArray,
       top: 40,
+      left: 20,
+      right: 20,
+      pageIconColor: '#FFFFFF',
+      pageTextStyle: {
+        color: '#FFFFFF'
+      },
       textStyle: {
         color: '#FFFFFF'
       }
@@ -439,7 +458,7 @@ const getChartOption = (data) => {
       left: '3%',
       right: '4%',
       bottom: '3%',
-      top: '20%',
+      top: categoryArray.length > 8 ? '24%' : '20%',
       containLabel: true
     },
     xAxis: {
@@ -565,7 +584,9 @@ const loadData = async () => {
     const params = {
       startDate: props.startDate,
       endDate: props.endDate,
-      userName: props.userName
+      userName: props.userName,
+      departmentId: props.departmentId || null,
+      applicantId: props.applicantId || null
     }
     if (props.mainCategory) params.mainCategory = props.mainCategory
     
@@ -622,6 +643,8 @@ const exportData = async () => {
       startDate: props.startDate,
       endDate: props.endDate,
       userName: props.userName,
+      departmentId: props.departmentId || null,
+      applicantId: props.applicantId || null,
       ...(props.mainCategory && { mainCategory: props.mainCategory })
     }
     
@@ -662,7 +685,7 @@ const exportData = async () => {
 }
 
 // 监听参数变化
-watch([() => props.startDate, () => props.endDate, () => props.userName, () => props.mainCategory], () => {
+watch([() => props.startDate, () => props.endDate, () => props.userName, () => props.departmentId, () => props.applicantId, () => props.mainCategory, () => props.queryVersion], () => {
   currentPage.value = 1
   loadData()
 })

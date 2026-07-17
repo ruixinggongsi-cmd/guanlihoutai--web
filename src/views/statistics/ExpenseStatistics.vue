@@ -72,19 +72,43 @@
           <!-- 用户分类占比专用条件 - 可选 -->
           <div v-if="activeTab === 'userBreakdown'" class="space-y-3">
             <label class="block text-sm font-semibold text-gray-300 mb-2 flex items-center">
-              <i class="fas fa-user mr-2 text-warning"></i>
-              用户姓名
+              <i class="fas fa-building mr-2 text-warning"></i>
+              部门/团队
               <span class="ml-1 text-xs text-gray-400">(可选)</span>
             </label>
             <div class="relative">
-              <input 
-                v-model="queryForm.userName"
-                type="text"
-                placeholder="请输入用户姓名（可选）"
-                class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-warning focus:border-warning/50 transition-all duration-300 hover:bg-white/15 pl-10"
-                @keyup.enter="handleQuery"
+              <select
+                v-model="queryForm.departmentId"
+                class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-warning focus:border-warning/50 transition-all duration-300 hover:bg-white/15 pl-10 appearance-none"
               >
+                <option value="" class="bg-slate-800">全部部门/团队</option>
+                <option v-for="department in departmentOptions" :key="department.id" :value="department.id" class="bg-slate-800">
+                  {{ department.label }}
+                </option>
+              </select>
+              <i class="fas fa-building absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+              <i class="fas fa-chevron-down absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none"></i>
+            </div>
+          </div>
+
+          <div v-if="activeTab === 'userBreakdown'" class="space-y-3">
+            <label class="block text-sm font-semibold text-gray-300 mb-2 flex items-center">
+              <i class="fas fa-user mr-2 text-warning"></i>
+              人员
+              <span class="ml-1 text-xs text-gray-400">(可选)</span>
+            </label>
+            <div class="relative">
+              <select
+                v-model="queryForm.applicantId"
+                class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-warning focus:border-warning/50 transition-all duration-300 hover:bg-white/15 pl-10 appearance-none"
+              >
+                <option value="" class="bg-slate-800">全部人员</option>
+                <option v-for="user in availableUserOptions" :key="user.id" :value="user.id" class="bg-slate-800">
+                  {{ user.name || user.username }}
+                </option>
+              </select>
               <i class="fas fa-user absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+              <i class="fas fa-chevron-down absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none"></i>
             </div>
           </div>
 
@@ -163,7 +187,7 @@
           </div>
         </div>
         
-        <div class="flex items-center">
+        <div class="flex items-center justify-between gap-4">
           <!-- 左侧提示信息 -->
           <div class="flex items-center space-x-4">
             <div class="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-gray-300 text-sm">
@@ -214,6 +238,22 @@
                 <i class="fas fa-history mr-1"></i>去年
               </button>
             </div>
+          </div>
+          <div class="flex items-center space-x-3">
+            <button
+              @click="handleQuery"
+              class="px-5 py-2.5 bg-gradient-to-r from-primary to-secondary hover:from-primary/90 hover:to-secondary/90 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 flex items-center space-x-2"
+            >
+              <i class="fas fa-search"></i>
+              <span>查询</span>
+            </button>
+            <button
+              @click="handleReset"
+              class="px-5 py-2.5 bg-white/10 hover:bg-white/20 text-gray-200 border border-white/20 rounded-xl transition-all duration-300 flex items-center space-x-2"
+            >
+              <i class="fas fa-undo"></i>
+              <span>重置</span>
+            </button>
           </div>
         </div>
 
@@ -266,8 +306,11 @@
           :start-date="queryForm.startDate"
           :end-date="queryForm.endDate"
           :user-name="queryForm.userName"
+          :department-id="queryForm.departmentId"
+          :applicant-id="queryForm.applicantId"
           :main-category="queryForm.mainCategory"
           :group-by="queryForm.groupBy"
+          :query-version="queryVersion"
           @update:start-date="queryForm.startDate = $event"
           @update:end-date="queryForm.endDate = $event"
           @loading="handleLoading"
@@ -286,6 +329,8 @@ console.log('[费用统计] 时间戳:', new Date().toISOString())
 import { ref, reactive, onMounted, watch, computed, nextTick } from 'vue'
 import NavigationBar from '@/components/NavigationBar.vue'
 import { getMainCategoriesList } from '@/api/expense'
+import { getDepartmentTree } from '@/api/department'
+import { getUserList } from '@/api/users'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import { permissionUtils } from '@/utils/permission'
@@ -426,6 +471,8 @@ const queryForm = reactive({
   startDate: '',
   endDate: '',
   userName: '',
+  departmentId: '',
+  applicantId: '',
   mainCategory: '',
   groupBy: 'day' // 新增：趋势统计维度
 })
@@ -438,8 +485,36 @@ const getDateString = (date) => {
 }
 
 const mainCategories = ref([])
+const departmentOptions = ref([])
+const users = ref([])
 const loading = ref(false)
 const showValidation = ref(false) // 新增：显示验证信息
+const queryVersion = ref(0)
+
+const departmentChildrenMap = computed(() => {
+  const map = {}
+  departmentOptions.value.forEach((department) => {
+    const parentId = department.parent_id || ''
+    if (!map[parentId]) map[parentId] = []
+    map[parentId].push(department.id)
+  })
+  return map
+})
+
+const collectDepartmentIds = (departmentId, result = new Set()) => {
+  if (!departmentId) return result
+  result.add(departmentId)
+  ;(departmentChildrenMap.value[departmentId] || []).forEach((childId) => {
+    collectDepartmentIds(childId, result)
+  })
+  return result
+}
+
+const availableUserOptions = computed(() => {
+  if (!queryForm.departmentId) return users.value
+  const allowedIds = collectDepartmentIds(queryForm.departmentId)
+  return users.value.filter((user) => allowedIds.has(user.department || user.department_id))
+})
 
 // 图表选项卡配置
 const chartTabs = computed(() => {
@@ -601,6 +676,49 @@ const setQuickDate = (type) => {
    }
  }
 
+const flattenDepartmentTree = (nodes = [], depth = 0) => {
+  const result = []
+  nodes.forEach((node) => {
+    const name = node.department_name || node.name || '未命名'
+    const prefix = depth > 0 ? `${'　'.repeat(depth)}└ ` : ''
+    result.push({
+      ...node,
+      id: node.id,
+      parent_id: node.parent_id || node.parentId || '',
+      label: `${prefix}${name}`
+    })
+    if (Array.isArray(node.children) && node.children.length > 0) {
+      result.push(...flattenDepartmentTree(node.children, depth + 1))
+    }
+  })
+  return result
+}
+
+const loadDepartmentOptions = async () => {
+  try {
+    const res = await getDepartmentTree()
+    if (res.success || res.code === 200) {
+      departmentOptions.value = flattenDepartmentTree(res.data || [])
+    }
+  } catch (error) {
+    console.error('获取部门/团队失败:', error)
+  }
+}
+
+const loadUserOptions = async () => {
+  try {
+    const res = await getUserList({ page: 1, pageSize: 10000 })
+    if (res.success || res.code === 200) {
+      users.value = (res.data || []).map((user) => ({
+        ...user,
+        department: user.department || user.department_id
+      }))
+    }
+  } catch (error) {
+    console.error('获取人员列表失败:', error)
+  }
+}
+
 // 查询处理
 const handleQuery = () => {
   // 显示验证信息
@@ -614,6 +732,7 @@ const handleQuery = () => {
   
   // 容器组件不直接处理数据查询，只传递参数给子组件
   // 子组件会监听参数变化并自动加载数据
+  queryVersion.value += 1
   ElMessage.success('查询参数已更新，子组件将自动加载数据')
 }
 
@@ -626,10 +745,12 @@ const handleReset = () => {
   queryForm.startDate = ''
   queryForm.endDate = ''
   queryForm.userName = ''
+  queryForm.departmentId = ''
+  queryForm.applicantId = ''
   queryForm.mainCategory = ''
   queryForm.groupBy = 'day'
   showValidation.value = false
-  handleQuery()
+  queryVersion.value += 1
 }
 
 // 处理加载状态
@@ -655,6 +776,8 @@ watch(activeTab, (newTab) => {
   // 根据选项卡重置特定字段
   if (newTab === 'userBreakdown') {
     queryForm.userName = ''
+    queryForm.departmentId = ''
+    queryForm.applicantId = ''
   } else if (newTab === 'categoryStats') {
     queryForm.mainCategory = ''
   } else if (newTab === 'trend') {
@@ -667,6 +790,10 @@ watch(activeTab, (newTab) => {
   }
 })
 
+watch(() => queryForm.departmentId, () => {
+  queryForm.applicantId = ''
+})
+
 onMounted(async () => {
   console.log('[费用统计] ========== 组件已挂载 (onMounted) ==========')
   console.log('[费用统计] 当前用户信息:', userStore.userInfo)
@@ -677,7 +804,11 @@ onMounted(async () => {
   console.log('[费用统计] 选项卡数量:', chartTabs.value.length)
   console.log('[费用统计] ====================================')
   
-  await getMainCategories()
+  await Promise.all([
+    getMainCategories(),
+    loadDepartmentOptions(),
+    loadUserOptions()
+  ])
   
   // 默认日期：今年 1 月 1 日 至 今天（可在概览内改时间或点快捷按钮）
   const endDate = new Date()

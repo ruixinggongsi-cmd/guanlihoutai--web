@@ -189,7 +189,15 @@
                     >
                       <i class="fas fa-eye group-hover:scale-110 transition-transform duration-300"></i>
                     </button>
-                  <!-- 编辑和删除功能已移除 -->
+                    <button
+                      v-if="['rejected', 'cancelled'].includes(expense.status)"
+                      v-permission="'expense:add'"
+                      @click="editRejectedExpense(expense)"
+                      class="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-300 hover:shadow-lg group"
+                      title="重新编辑并提交"
+                    >
+                      <i class="fas fa-edit group-hover:scale-110 transition-transform duration-300"></i>
+                    </button>
                   </div>
                 </td>
               </tr>
@@ -553,17 +561,14 @@
               <i v-else class="fas fa-ban group-hover:rotate-12 transition-transform duration-300"></i>
               <span>{{ isCancelling ? '取消中...' : '取消申请' }}</span>
             </button>
-            <!-- 编辑功能已移除 -->
-            <!--
             <button 
-              v-if="viewingExpense?.status === 'pending'"
-              @click="editExpense(viewingExpense)"
+              v-if="['rejected', 'cancelled'].includes(viewingExpense?.status)"
+              @click="editRejectedExpense(viewingExpense)"
               class="px-4 py-2 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white font-medium rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 flex items-center space-x-2 text-sm group"
             >
               <i class="fas fa-edit group-hover:rotate-12 transition-transform duration-300"></i>
-              <span>编辑</span>
+              <span>重新编辑</span>
             </button>
-            -->
           </div>
         </div>
       </div>
@@ -576,7 +581,7 @@
         <div class="p-6 border-b border-white/20">
           <div class="flex items-center justify-between">
             <h3 class="text-xl font-semibold text-white">
-              添加费用
+              {{ editingExpense ? '重新编辑费用申请' : '添加费用' }}
             </h3>
             <button 
               @click="closeExpenseModal"
@@ -717,6 +722,7 @@
                 <option value="微信">微信</option>
                 <option value="银行卡">银行卡</option>
                 <option value="USDT">USDT</option>
+                <option value="现金支付">现金支付</option>
                 <option value="其他">其他</option>
               </select>
             </div>
@@ -850,7 +856,7 @@
           >
             <i v-if="isSaving || isUploading" class="fas fa-spinner fa-spin"></i>
             <i v-else class="fas fa-save group-hover:scale-110 transition-transform duration-300"></i>
-            <span>{{ isSaving || isUploading ? (isUploading ? '上传中...' : '保存中...') : '保存费用' }}</span>
+            <span>{{ isSaving || isUploading ? (isUploading ? '上传中...' : '保存中...') : (editingExpense ? '重新提交' : '保存费用') }}</span>
           </button>
         </div>
       </div>
@@ -1481,6 +1487,29 @@ const selectSubCategory = (categoryId) => {
   expenseForm.value.subCategoryId = categoryId
 }
 
+const parseAmountPartsFromDescription = (description = '', amount = '') => {
+  const text = String(description || '')
+  const unitPriceMatch = text.match(/(?:商品单价|单价)[：:]\s*([0-9]+(?:\.[0-9]+)?)/)
+  const quantityMatch = text.match(/(?:购买数量|数量)[：:]\s*([0-9]+(?:\.[0-9]+)?)/)
+  const unitPrice = unitPriceMatch?.[1] || amount || ''
+  const quantity = quantityMatch?.[1] || 1
+  return { unitPrice, quantity }
+}
+
+const normalizeAttachments = (attachments) => {
+  if (!attachments) return []
+  if (Array.isArray(attachments)) return attachments
+  if (typeof attachments === 'string') {
+    try {
+      const parsed = JSON.parse(attachments)
+      return Array.isArray(parsed) ? parsed : []
+    } catch (error) {
+      return []
+    }
+  }
+  return []
+}
+
 const showAddExpenseModal = () => {
   editingExpense.value = null
   expenseForm.value = {
@@ -1501,6 +1530,34 @@ const showAddExpenseModal = () => {
   // 重置分类选择
   selectedMainCategory.value = null
   selectedSubCategory.value = null
+  showExpenseModal.value = true
+}
+
+const editRejectedExpense = (expense) => {
+  const { unitPrice, quantity } = parseAmountPartsFromDescription(expense.description, expense.amount)
+  editingExpense.value = expense
+  expenseForm.value = {
+    name: expense.name || '',
+    mainCategoryId: expense.main_category_id || expense.mainCategoryId || '',
+    subCategoryId: expense.sub_category_id || expense.subCategoryId || '',
+    unitPrice,
+    quantity,
+    amount: expense.amount || '',
+    date: expense.date || expense.expense_date || new Date().toISOString().split('T')[0],
+    description: expense.description || '',
+    paymentMethod: expense.payment_method || expense.paymentMethod || '',
+    payeeName: expense.payee_name || expense.payeeName || '',
+    accountName: expense.account_name || expense.accountName || '',
+    accountType: expense.account_type || expense.accountType || ''
+  }
+  uploadedAttachments.value = normalizeAttachments(expense.attachments)
+  selectedFiles.value = []
+  uploadProgress.value = 0
+  isUploading.value = false
+  selectedMainCategory.value = expenseForm.value.mainCategoryId
+  selectedSubCategory.value = expenseForm.value.subCategoryId
+  showViewModal.value = false
+  viewingExpense.value = null
   showExpenseModal.value = true
 }
 
@@ -1600,21 +1657,6 @@ const cancelExpenseApplication = async () => {
   }
 }
 
-// 移除编辑功能
-// const editExpense = (expense) => {
-//   editingExpense.value = expense
-//   expenseForm.value = {
-//     name: expense.name,
-//     mainCategoryId: expense.mainCategoryId,
-//     subCategoryId: expense.subCategoryId,
-//     amount: expense.amount,
-//     date: expense.date,
-//     description: expense.description,
-//     status: expense.status
-//   }
-//   showExpenseModal.value = true
-// }
-
 // 移除删除功能
 // const deleteExpense = (expense) => {
 //   if (confirm(`确定要删除费用 "${expense.name}" 吗？`)) {
@@ -1647,6 +1689,7 @@ const saveExpense = async () => {
   isSaving.value = true
   
   try {
+    const isResubmit = !!editingExpense.value
     const expenseData = {
       name: expenseForm.value.name,
       main_category_id: expenseForm.value.mainCategoryId,
@@ -1664,26 +1707,28 @@ const saveExpense = async () => {
       account_type: expenseForm.value.accountType || ''
     }
 
-    const response = await expenseApplicationsAPI.createExpenseApplication(expenseData)
+    const response = isResubmit
+      ? await expenseApplicationsAPI.resubmitExpenseApplication(editingExpense.value.id, expenseData)
+      : await expenseApplicationsAPI.createExpenseApplication(expenseData)
     
     if (response.success) {
       // 创建成功后刷新列表
       await loadExpenseApplications()
       closeExpenseModal()
       ElMessage.success({
-        message: '费用申请创建成功！',
+        message: isResubmit ? '费用申请已重新提交！' : '费用申请创建成功！',
         duration: 1000
       })
     } else {
       ElMessage.error({
-        message: '创建费用申请失败：' + response.message,
+        message: (isResubmit ? '重新提交费用申请失败：' : '创建费用申请失败：') + response.message,
         duration: 1000
       })
     }
   } catch (error) {
-    console.error('创建费用申请错误:', error)
+    console.error(editingExpense.value ? '重新提交费用申请错误:' : '创建费用申请错误:', error)
     ElMessage.error({
-      message: '创建费用申请失败，请稍后重试',
+      message: editingExpense.value ? '重新提交费用申请失败，请稍后重试' : '创建费用申请失败，请稍后重试',
       duration: 1000
     })
   } finally {
