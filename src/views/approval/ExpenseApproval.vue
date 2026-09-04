@@ -47,7 +47,7 @@
 
       <!-- 搜索和筛选 -->
       <div class="backdrop-blur-lg bg-white/10 rounded-2xl border border-white/20 shadow-2xl p-8 mb-8 animate-fade-in" style="animation-delay: 0.1s">
-        <div class="grid grid-cols-1 lg:grid-cols-6 gap-6">
+        <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
           <div class="lg:col-span-2 space-y-3">
             <label class="block text-sm font-semibold text-gray-300">搜索关键词</label>
             <div class="relative">
@@ -105,19 +105,6 @@
             </select>
           </div>
           
-          <div class="space-y-3">
-            <label class="block text-sm font-semibold text-gray-300">费用类型</label>
-            <select 
-              v-model="typeFilter"
-              class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary/50 transition-all duration-300 hover:bg-white/15"
-            >
-              <option value="" class="bg-slate-800">所有类型</option>
-              <option value="travel" class="bg-slate-800">差旅费</option>
-              <option value="office" class="bg-slate-800">办公费</option>
-              <option value="entertainment" class="bg-slate-800">招待费</option>
-              <option value="other" class="bg-slate-800">其他</option>
-            </select>
-          </div>
         </div>
         
         <div class="grid grid-cols-1 lg:grid-cols-6 gap-6 mt-6">
@@ -817,7 +804,6 @@ import { permissionUtils } from '@/utils/permission'
 // 响应式数据
 const searchKeyword = ref('')
 const statusFilter = ref('')
-const typeFilter = ref('')
 const startDate = ref('')
 const endDate = ref('')
 const activeTab = ref('pending')
@@ -861,35 +847,7 @@ const availableSubCategories = computed(() => {
 })
 
 const filteredApprovals = computed(() => {
-  const list = activeTab.value === 'pending' ? pendingApprovals.value : processedApprovals.value
-  return list.filter(item => {
-    const matchesSearch = !searchKeyword.value || 
-      item.name.toLowerCase().includes(searchKeyword.value.toLowerCase()) ||
-      item.applicant.name.toLowerCase().includes(searchKeyword.value.toLowerCase()) ||
-      item.applicant.department.toLowerCase().includes(searchKeyword.value.toLowerCase())
-    
-    const matchesStatus = !statusFilter.value || getBusinessStatus(item.status, item) === statusFilter.value
-    const matchesType = !typeFilter.value || item.type === typeFilter.value
-    const matchesMainCategory = !selectedMainCategory.value || item.mainCategoryId === selectedMainCategory.value
-    const matchesSubCategory = !selectedSubCategory.value || item.subCategoryId === selectedSubCategory.value
-    
-    // 日期范围过滤
-    let matchesDateRange = true
-    if (startDate.value || endDate.value) {
-      const itemDate = new Date(item.date)
-      if (startDate.value) {
-        const start = new Date(startDate.value)
-        matchesDateRange = matchesDateRange && itemDate >= start
-      }
-      if (endDate.value) {
-        const end = new Date(endDate.value)
-        end.setHours(23, 59, 59, 999) // 包含结束日期的整天
-        matchesDateRange = matchesDateRange && itemDate <= end
-      }
-    }
-    
-    return matchesSearch && matchesStatus && matchesType && matchesMainCategory && matchesSubCategory && matchesDateRange
-  })
+  return activeTab.value === 'pending' ? pendingApprovals.value : processedApprovals.value
 })
 
 const pendingCount = computed(() => pendingApprovals.value.length)
@@ -920,7 +878,7 @@ const loadCategories = async () => {
       // 递归处理树形结构，提取主分类和子分类
       const processCategories = (categoryList, parentId = null) => {
         categoryList.forEach(category => {
-          if (!category.parent_id) {
+          if (!parentId && !category.parent_id) {
             // 主分类
             mainCats.push({
               id: category.id,
@@ -933,7 +891,7 @@ const loadCategories = async () => {
             subCats.push({
               id: category.id,
               name: category.category_name,
-              parentId: category.parent_id,
+              parentId: category.parent_id || parentId,
               icon: category.icon || 'fas fa-folder-open'
             })
           }
@@ -1054,7 +1012,6 @@ const searchApprovals = () => {
 const resetFilter = () => {
   searchKeyword.value = ''
   statusFilter.value = ''
-  typeFilter.value = ''
   startDate.value = ''
   endDate.value = ''
   selectedMainCategory.value = ''

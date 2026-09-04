@@ -755,7 +755,7 @@
               <tbody class="divide-y divide-white/10">
                 <tr 
                   v-for="(customer, index) in paginatedCustomerList" 
-                  :key="getCustomerKey(customer, index)"
+                  :key="customer._rowId"
                   class="hover:bg-white/5 transition-colors"
                 >
                   <td class="px-4 py-3">
@@ -1547,7 +1547,7 @@ const bulkUpdateDuplicateStatus = async (customerIds = null, comparePhone = '') 
       await loadDatabaseStats()
       ElMessage.success({ message: response.message || '状态修改成功', duration: 3000 })
       if (response.data?.historySkipped) {
-        ElMessage.warning({ message: '状态已修改，但状态记录表未创建，请执行 create_customer_status_change_logs.sql', duration: 5000 })
+        ElMessage.warning({ message: '状态已修改，但修改人记录写入失败（请检查后端 SUPABASE_SERVICE_KEY / RLS）', duration: 5000 })
       }
     } else {
       ElMessage.error({ message: response.message || '状态修改失败', duration: 3000 })
@@ -2049,6 +2049,7 @@ const handleFileUpload = async (event) => {
     const jsonData = XLSX.utils.sheet_to_json(firstSheet, { raw: false, defval: '' })
     
     customerList.value = jsonData.map(row => ({
+      _rowId: createRowId(),
       name: row['姓名'] || row['name'] || row['Name'] || '',
       phone: formatPhoneNumber(row['电话'] || row['phone'] || row['Phone'] || ''),
       email: row['邮箱'] || row['email'] || row['Email'] || '',
@@ -2067,6 +2068,7 @@ const handleFileUpload = async (event) => {
 
 const addNewRow = () => {
   customerList.value.push({
+    _rowId: createRowId(),
     name: '',
     phone: '',
     email: '',
@@ -2516,10 +2518,8 @@ const totalResultPages = computed(() => {
   return Math.ceil(compareResults.value.results.length / pageSize.value)
 })
 
-const getCustomerKey = (customer, index) => {
-  // 使用唯一标识作为key，避免分页时的问题
-  return customer.phone || customer.email || customer.name || `row-${(currentPage.value - 1) * pageSize.value + index}`
-}
+let rowIdSeq = 0
+const createRowId = () => `row-${Date.now()}-${++rowIdSeq}`
 
 // 格式化日期
 const formatDate = (dateString) => {
