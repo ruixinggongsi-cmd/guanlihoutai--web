@@ -924,6 +924,13 @@
                             <i class="fas fa-clock mr-1"></i>
                             创建时间: {{ formatDate(match.created_at) }}
                           </span>
+                          <span v-if="match.created_status || match.status">
+                            <i class="fas fa-tag mr-1"></i>
+                            创建状态:
+                            <span :class="getCustomerStatusClass(match.created_status || match.status)" class="px-2 py-0.5 rounded text-xs">
+                              {{ getCustomerStatusText(match.created_status || match.status) }}
+                            </span>
+                          </span>
                         </div>
                         <div v-if="match.latest_status_change" class="text-gray-400 ml-4 mt-1">
                           <i class="fas fa-history mr-1"></i>
