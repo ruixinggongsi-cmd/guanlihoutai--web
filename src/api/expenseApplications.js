@@ -151,6 +151,21 @@ export const expenseApplicationsAPI = {
   },
 
   /**
+   * 获取单笔费用的联合付款详情（含同组账单）
+   */
+  getJointPayment(id) {
+    return request.get(`/expense-applications/${id}/joint-payment`)
+  },
+
+  /**
+   * 批量查询费用的联合付款摘要
+   * @param {string[]} ids
+   */
+  lookupJointPayments(ids = []) {
+    return request.post('/expense-applications/joint-payment-lookup', { ids })
+  },
+
+  /**
    * 手动触发超时检查（检查并处理超过48小时未完成的审批）
    */
   checkTimeout() {

@@ -255,7 +255,12 @@
                   class="w-4 h-4 text-primary bg-white/10 border-white/20 rounded focus:ring-primary"
                 />
               </td>
-              <td class="px-4 py-3 text-white">{{ item.name }}</td>
+              <td class="px-4 py-3 text-white">
+                <div>{{ item.name }}</div>
+                <div v-if="item.jointPaymentSummary" class="mt-1">
+                  <JointPaymentInfo :summary-only="true" :summary="item.jointPaymentSummary" />
+                </div>
+              </td>
               <td class="px-4 py-3 text-white">
                 {{ item.applicant_info?.name || item.applicant_name || '未知' }}
               </td>
@@ -504,10 +509,14 @@
               </div>
 
               <!-- 付款信息 -->
-              <div v-if="viewingExpense?.payment_method || viewingExpense?.payee_name || viewingExpense?.account_name || viewingExpense?.account_type" class="mt-6 pt-6 border-t border-white/10">
+              <div v-if="viewingExpense?.payment_method || viewingExpense?.payee_name || viewingExpense?.account_name || viewingExpense?.account_type || viewingExpense?.jointPayment" class="mt-6 pt-6 border-t border-white/10">
+                <JointPaymentInfo
+                  v-if="viewingExpense?.jointPayment"
+                  class="mb-4"
+                  :joint-payment="viewingExpense.jointPayment"
+                  :current-expense-id="viewingExpense?.id"
+                />
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <!-- 左侧：付款方式 -->
-                  <div class="space-y-4">
                     <div v-if="viewingExpense?.payment_method" class="flex items-start justify-between py-3 border-b border-white/10">
                       <label class="text-sm font-medium text-gray-400 flex items-center">
                         <i class="fas fa-credit-card mr-2 text-blue-400"></i>
@@ -527,10 +536,7 @@
                         {{ viewingExpense.payee_name }}
                       </div>
                     </div>
-                  </div>
-
-                  <!-- 右侧：账户信息 -->
-                  <div class="space-y-4">
+                  
                     <div v-if="viewingExpense?.account_name" class="flex items-start justify-between py-3 border-b border-white/10">
                       <label class="text-sm font-medium text-gray-400 flex items-center">
                         <i class="fas fa-university mr-2 text-green-400"></i>
@@ -550,7 +556,6 @@
                         {{ viewingExpense.account_type }}
                       </div>
                     </div>
-                  </div>
                 </div>
               </div>
             </div>
@@ -639,6 +644,7 @@ import { getActiveApprovalApplications, getPaidExpenseApplications } from '@/api
 import { getDepartmentTree } from '@/api/department'
 import { getMainCategoriesList } from '@/api/expense'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import JointPaymentInfo from '@/components/JointPaymentInfo.vue'
 
 const props = defineProps({
   startDate: {
@@ -770,6 +776,23 @@ const getLocalDateRange = (startDate, endDate) => {
 }
 
 // 加载数据
+const attachJointPaymentSummaries = async (list = []) => {
+  const ids = list.map((item) => item.id).filter(Boolean)
+  if (!ids.length) return list
+  try {
+    const response = await expenseApplicationsAPI.lookupJointPayments(ids)
+    if (response.success && response.data) {
+      return list.map((item) => ({
+        ...item,
+        jointPaymentSummary: response.data[item.id] || null
+      }))
+    }
+  } catch (err) {
+    console.warn('[所有申请记录] 联合付款摘要加载失败:', err)
+  }
+  return list
+}
+
 const loadData = async () => {
   // 如果没有设置日期范围，使用默认日期范围（最近一年）
   let startDate = props.startDate
@@ -807,7 +830,7 @@ const loadData = async () => {
         pagination.total = paidData.length
         pagination.totalPages = Math.ceil(pagination.total / pagination.pageSize)
         const start = (pagination.page - 1) * pagination.pageSize
-        applications.value = paidData.slice(start, start + pagination.pageSize)
+        applications.value = await attachJointPaymentSummaries(paidData.slice(start, start + pagination.pageSize))
         return
       }
 
@@ -846,7 +869,7 @@ const loadData = async () => {
         pagination.total = paymentPendingData.length
         pagination.totalPages = Math.ceil(pagination.total / pagination.pageSize)
         const start = (pagination.page - 1) * pagination.pageSize
-        applications.value = paymentPendingData.slice(start, start + pagination.pageSize)
+        applications.value = await attachJointPaymentSummaries(paymentPendingData.slice(start, start + pagination.pageSize))
         return
       }
 
@@ -869,7 +892,7 @@ const loadData = async () => {
       })
 
       if (response.success) {
-        applications.value = response.data || []
+        applications.value = await attachJointPaymentSummaries(response.data || [])
         pagination.total = response.pagination?.total || 0
         pagination.totalPages = response.pagination?.totalPages || 0
         return
@@ -900,7 +923,7 @@ const loadData = async () => {
     console.log('[所有申请记录] 返回数据量:', response.data?.length || 0)
     
     if (response.success) {
-      applications.value = response.data || []
+      applications.value = await attachJointPaymentSummaries(response.data || [])
       pagination.total = response.pagination?.total || 0
       pagination.totalPages = response.pagination?.totalPages || 0
       console.log('[所有申请记录] 数据加载成功:', {
@@ -1284,15 +1307,17 @@ const handleView = async (item) => {
     try {
       const detailResponse = await expenseApplicationsAPI.getExpenseApplicationDetail(item.id)
       if (detailResponse.success && detailResponse.data) {
-        // 合并详情数据，保留列表中的申请人信息
+        // 合并详情数据，保留列表中的申请人信息；联合付款以详情为准
         viewingExpense.value = {
+          ...item,
           ...detailResponse.data,
-          ...item, // 保留列表中的信息（如 applicant_info）
-          // 确保字段名统一
+          applicant_info: item.applicant_info || detailResponse.data.applicant_info,
+          department_name: item.department_name || detailResponse.data.department_name,
           payment_method: detailResponse.data.payment_method || detailResponse.data.paymentMethod,
           payee_name: detailResponse.data.payee_name || detailResponse.data.payeeName,
           account_name: detailResponse.data.account_name || detailResponse.data.accountName,
-          account_type: detailResponse.data.account_type || detailResponse.data.accountType
+          account_type: detailResponse.data.account_type || detailResponse.data.accountType,
+          jointPayment: detailResponse.data.jointPayment || null
         }
       }
     } catch (detailError) {

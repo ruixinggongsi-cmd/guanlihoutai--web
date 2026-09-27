@@ -30,7 +30,10 @@
       </div>
       
       <!-- 昨日支出 -->
-      <div class="backdrop-blur-lg bg-gradient-to-br from-purple-500/20 to-pink-600/20 rounded-2xl border border-purple-400/30 shadow-xl p-6">
+      <div
+        @click="viewStatusList('yesterday')"
+        class="backdrop-blur-lg bg-gradient-to-br from-purple-500/20 to-pink-600/20 rounded-2xl border border-purple-400/30 shadow-xl p-6 cursor-pointer hover:from-purple-500/30 hover:to-pink-600/30 hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1"
+      >
         <div class="flex items-center justify-between mb-4">
           <div class="flex items-center space-x-3">
             <div class="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center shadow-lg">
@@ -56,7 +59,10 @@
       </div>
       
       <!-- 今日支出 -->
-      <div class="backdrop-blur-lg bg-gradient-to-br from-emerald-500/20 to-teal-600/20 rounded-2xl border border-emerald-400/30 shadow-xl p-6">
+      <div
+        @click="viewStatusList('today')"
+        class="backdrop-blur-lg bg-gradient-to-br from-emerald-500/20 to-teal-600/20 rounded-2xl border border-emerald-400/30 shadow-xl p-6 cursor-pointer hover:from-emerald-500/30 hover:to-teal-600/30 hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1"
+      >
         <div class="flex items-center justify-between mb-4">
           <div class="flex items-center space-x-3">
             <div class="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-lg">
@@ -375,6 +381,12 @@
                 <label class="block text-sm font-medium text-gray-400 mb-3">描述</label>
                 <div class="text-gray-300 leading-relaxed">{{ viewingExpenseDetail.description }}</div>
               </div>
+              <div v-if="viewingExpenseDetail.jointPayment" class="mt-6 pt-6 border-t border-white/10">
+                <JointPaymentInfo
+                  :joint-payment="viewingExpenseDetail.jointPayment"
+                  :current-expense-id="viewingExpenseDetail.id"
+                />
+              </div>
             </div>
             
             <!-- 审批记录 -->
@@ -459,6 +471,7 @@ import { ref, onMounted, watch, computed } from 'vue'
 import { getActiveApprovalApplications, getExpenseCardSummary, getPaidExpenseApplications } from '@/api/expenseStatistics'
 import { expenseApplicationsAPI } from '@/api/expenseApplications'
 import { useUserStore } from '@/stores/user'
+import JointPaymentInfo from '@/components/JointPaymentInfo.vue'
 
 const props = defineProps({
   startDate: {
@@ -690,7 +703,9 @@ const getStatusTitle = (status) => {
   const titles = {
     approved: '已支出订单列表',
     approving: '审批中订单列表',
-    payment_pending: '待付款订单列表'
+    payment_pending: '待付款订单列表',
+    yesterday: `昨日支出订单列表（${yesterdayDate.value || '昨日'}）`,
+    today: `今日支出订单列表（${todayDate.value || '今日'}）`
   }
   return titles[status] || '订单列表'
 }
@@ -724,9 +739,18 @@ const loadStatusList = async () => {
     const statusEndDate = props.endDate || getDateString(today)
     const statusRange = getLocalDateRange(statusStartDate, statusEndDate)
 
-    // 已支出列表按财务付款完成时间统计
-    if (currentStatus.value === 'approved') {
-      const response = await getPaidExpenseApplications(buildPaidExpenseParams(statusRange.startAt, statusRange.endAt))
+    // 已支出 / 昨日 / 今日：按财务付款完成时间统计
+    if (['approved', 'yesterday', 'today'].includes(currentStatus.value)) {
+      let paidRange = statusRange
+      if (currentStatus.value === 'yesterday') {
+        const yesterday = new Date()
+        yesterday.setDate(yesterday.getDate() - 1)
+        paidRange = getLocalDayRange(yesterday)
+      } else if (currentStatus.value === 'today') {
+        paidRange = getLocalDayRange(new Date())
+      }
+
+      const response = await getPaidExpenseApplications(buildPaidExpenseParams(paidRange.startAt, paidRange.endAt))
 
       if (response.success) {
         const paidData = response.data || []
@@ -828,8 +852,10 @@ const viewExpenseDetail = async (item) => {
       const detailResponse = await expenseApplicationsAPI.getExpenseApplicationDetail(item.id)
       if (detailResponse.success && detailResponse.data) {
         viewingExpenseDetail.value = {
+          ...item,
           ...detailResponse.data,
-          ...item // 保留列表中的信息
+          jointPayment: detailResponse.data.jointPayment || null,
+          applicant_info: item.applicant_info || detailResponse.data.applicant_info
         }
       }
     } catch (error) {

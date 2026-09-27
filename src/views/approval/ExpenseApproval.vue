@@ -155,7 +155,7 @@
             <!-- 选项卡 -->
             <div class="flex bg-white/5 rounded-lg p-1">
               <button 
-                @click="activeTab = 'pending'" 
+                @click="switchTab('pending')" 
                 :class="activeTab === 'pending' ? 'bg-primary text-white' : 'text-gray-400 hover:text-white'"
                 class="px-4 py-2 rounded-md font-medium transition-all duration-300"
               >
@@ -164,7 +164,16 @@
                 <span class="ml-2 bg-yellow-500/20 text-yellow-400 px-2 py-1 rounded-full text-xs">{{ pendingCount }}</span>
               </button>
               <button 
-                @click="activeTab = 'processed'" 
+                @click="switchTab('joint')" 
+                :class="activeTab === 'joint' ? 'bg-primary text-white' : 'text-gray-400 hover:text-white'"
+                class="px-4 py-2 rounded-md font-medium transition-all duration-300"
+              >
+                <i class="fas fa-link mr-2"></i>
+                联合付款
+                <span class="ml-2 bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded-full text-xs">{{ jointGroupCount }}</span>
+              </button>
+              <button 
+                @click="switchTab('processed')" 
                 :class="activeTab === 'processed' ? 'bg-primary text-white' : 'text-gray-400 hover:text-white'"
                 class="px-4 py-2 rounded-md font-medium transition-all duration-300"
               >
@@ -175,7 +184,120 @@
             </div>
           </div>
         </div>
-        <div class="overflow-x-auto">
+        <div v-if="activeTab === 'joint'" class="p-6 space-y-4">
+          <div class="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+            <i class="fas fa-info-circle mr-2"></i>
+            按「付款方式 + 收款账号」自动合并展示。每笔账单归属与审批不变，财务统一付款后可整组通过。
+          </div>
+
+          <div v-if="jointLoading" class="py-16 text-center text-gray-400">
+            <i class="fas fa-spinner fa-spin text-2xl mb-3"></i>
+            <p>正在加载联合付款数据...</p>
+          </div>
+
+          <div v-else-if="jointPaymentGroups.length === 0" class="py-16 text-center text-gray-400">
+            <i class="fas fa-inbox text-3xl mb-3"></i>
+            <p>暂无待付款记录</p>
+          </div>
+
+          <div
+            v-for="group in jointPaymentGroups"
+            :key="group.key"
+            class="rounded-2xl border border-white/15 bg-white/5 overflow-hidden"
+          >
+            <div class="px-5 py-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-white/10 bg-white/5">
+              <div class="space-y-2 min-w-0">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span
+                    v-if="group.isJoint"
+                    class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30"
+                  >
+                    <i class="fas fa-link mr-1"></i>
+                    联合付款 · {{ group.count }} 笔 · 合计 ¥{{ formatMoney(group.totalAmount) }}
+                  </span>
+                  <span
+                    v-else
+                    class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-500/20 text-slate-300 border border-slate-400/30"
+                  >
+                    单笔待付款 · ¥{{ formatMoney(group.totalAmount) }}
+                  </span>
+                  <span class="text-xs text-gray-400">{{ group.paymentMethod || '未知方式' }}</span>
+                </div>
+                <div class="text-white font-medium break-all">
+                  收款账号：{{ group.accountType || '（未填写）' }}
+                </div>
+                <div class="text-sm text-gray-400">
+                  收款人：{{ group.payeeNames.join(' / ') || '-' }}
+                  <span v-if="group.accountNames.length" class="ml-2">账户名：{{ group.accountNames.join(' / ') }}</span>
+                </div>
+              </div>
+              <div class="flex items-center gap-2 flex-shrink-0">
+                <button
+                  @click="toggleJointGroup(group.key)"
+                  class="px-3 py-2 bg-white/10 text-gray-200 rounded-lg hover:bg-white/20 transition-colors text-sm"
+                >
+                  <i :class="expandedJointGroups[group.key] ? 'fas fa-chevron-up' : 'fas fa-chevron-down'" class="mr-1"></i>
+                  {{ expandedJointGroups[group.key] ? '收起明细' : '展开明细' }}
+                </button>
+                <button
+                  v-if="group.isJoint"
+                  @click="startJointApprove(group)"
+                  :disabled="jointApprovingKey === group.key"
+                  class="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-lg hover:from-emerald-600 hover:to-teal-700 transition-all text-sm font-medium disabled:opacity-50"
+                >
+                  <i :class="jointApprovingKey === group.key ? 'fas fa-spinner fa-spin' : 'fas fa-check-double'" class="mr-1"></i>
+                  确认联合付款
+                </button>
+              </div>
+            </div>
+
+            <div v-show="expandedJointGroups[group.key] || !group.isJoint" class="overflow-x-auto">
+              <table class="w-full">
+                <thead class="bg-black/20">
+                  <tr>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-400">费用名称</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-400">金额</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-400">联合付款</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-400">申请人</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-400">日期</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-400">操作</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-white/10">
+                  <tr v-for="item in group.items" :key="item.id" class="hover:bg-white/5">
+                    <td class="px-4 py-3 text-sm text-white">{{ item.name }}</td>
+                    <td class="px-4 py-3 text-sm text-white">¥{{ formatMoney(item.amount) }}</td>
+                    <td class="px-4 py-3">
+                      <span
+                        v-if="group.isJoint"
+                        class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300"
+                      >
+                        联合付款 ¥{{ formatMoney(group.totalAmount) }}
+                      </span>
+                      <span v-else class="text-xs text-gray-500">-</span>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-300">
+                      <div>{{ item.applicant?.name || item.applicant_name || '-' }}</div>
+                      <div class="text-xs text-gray-500">{{ item.applicant?.department || '-' }}</div>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-400">{{ formatDate(item.date) }}</td>
+                    <td class="px-4 py-3">
+                      <button
+                        v-permission="'expense:view'"
+                        @click="viewApproval(item)"
+                        class="px-3 py-1 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors text-sm"
+                      >
+                        <i class="fas fa-eye mr-1"></i>查看
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div v-else class="overflow-x-auto">
           <table class="w-full">
             <thead class="bg-white/5 border-b border-white/20">
               <tr>
@@ -191,8 +313,14 @@
             </thead>
             <tbody class="divide-y divide-white/10">
               <tr v-for="approval in filteredApprovals" :key="approval.id" class="hover:bg-white/5 transition-colors duration-200">
-                <td class="px-6 py-4 whitespace-nowrap">
+                <td class="px-6 py-4">
                   <div class="text-sm font-medium text-white">{{ approval.name }}</div>
+                  <div v-if="getJointMeta(approval)?.isJoint" class="mt-1">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-400/20">
+                      <i class="fas fa-link mr-1"></i>
+                      联合付款 ¥{{ formatMoney(getJointMeta(approval).totalAmount) }}（{{ getJointMeta(approval).count }}笔）
+                    </span>
+                  </div>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap">
                   <div class="text-sm text-white">{{ getMainCategoryName(approval.mainCategoryId) }}</div>
@@ -232,7 +360,7 @@
         </div>
         
         <!-- 分页 -->
-        <div class="bg-white/5 px-6 py-4 flex items-center justify-between border-t border-white/20">
+        <div v-if="activeTab !== 'joint'" class="bg-white/5 px-6 py-4 flex items-center justify-between border-t border-white/20">
           <div class="text-sm text-gray-400">
             显示 {{ (currentPage - 1) * pageSize + 1 }} 到 {{ Math.min(currentPage * pageSize, totalCount) }} 条，共 {{ totalCount }} 条记录
           </div>
@@ -246,7 +374,7 @@
               上一页
             </button>
             <span class="px-4 py-2 bg-white/10 text-white border border-white/20 rounded-xl">
-              {{ currentPage }} / {{ Math.ceil(totalCount / pageSize) }}
+              {{ currentPage }} / {{ Math.ceil(totalCount / pageSize) || 1 }}
             </span>
             <button 
               @click="nextPage"
@@ -257,6 +385,9 @@
               <i class="fas fa-chevron-right ml-2"></i>
             </button>
           </div>
+        </div>
+        <div v-else class="bg-white/5 px-6 py-3 border-t border-white/20 text-sm text-gray-400">
+          共 {{ jointPaymentItemCount }} 笔待付款，合并为 {{ jointPaymentGroups.length }} 组（其中联合付款 {{ jointGroupCount }} 组）
         </div>
       </div>
     </div>
@@ -271,7 +402,7 @@
                 <i :class="pendingApprovalAction === 'approve' ? 'fas fa-check' : 'fas fa-times'" class="text-white text-lg"></i>
               </div>
               <h3 class="text-xl font-bold text-white">
-                {{ pendingApprovalAction === 'approve' ? '审批通过' : '审批拒绝' }}
+                {{ pendingApprovalAction === 'joint_approve' ? '确认联合付款' : (pendingApprovalAction === 'approve' ? '审批通过' : '审批拒绝') }}
               </h3>
             </div>
             <button 
@@ -284,6 +415,9 @@
           </div>
 
           <div class="mb-6">
+            <p v-if="pendingApprovalAction === 'joint_approve'" class="text-emerald-300 text-sm mb-3">
+              将逐笔通过本组 {{ pendingJointGroup?.count || 0 }} 笔账单（合计 ¥{{ formatMoney(pendingJointGroup?.totalAmount || 0) }}），不改变各账单归属与审批记录。
+            </p>
             <p class="text-gray-300 text-sm mb-4">
               请填写审批理由（必填）：
             </p>
@@ -589,6 +723,26 @@
 
               <!-- 付款信息 -->
               <div class="mt-6 pt-6 border-t border-white/10">
+                <div
+                  v-if="getJointMeta(viewingExpense)?.isJoint"
+                  class="mb-4 rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3"
+                >
+                  <div class="flex items-center text-emerald-300 font-semibold text-sm">
+                    <i class="fas fa-link mr-2"></i>
+                    联合付款（待确认）
+                  </div>
+                  <div class="mt-1 text-emerald-200/90 text-sm">
+                    本组共 {{ getJointMeta(viewingExpense).count }} 笔，合计金额
+                    <span class="font-bold text-white">¥{{ formatMoney(getJointMeta(viewingExpense).totalAmount) }}</span>
+                    （本账单归属与审批不变）
+                  </div>
+                </div>
+                <JointPaymentInfo
+                  v-if="viewingExpense?.jointPayment"
+                  class="mb-4"
+                  :joint-payment="viewingExpense.jointPayment"
+                  :current-expense-id="viewingExpense?.id"
+                />
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <!-- 左侧：付款方式 -->
                   <div class="space-y-4">
@@ -760,8 +914,8 @@
         <!-- 操作按钮区域 - 固定在底部 -->
         <div class="p-6 border-t border-white/10 flex-shrink-0">
           <div class="flex justify-end space-x-4">
-            <!-- 只有在"待我审批"标签页才显示审批操作按钮 -->
-            <template v-if="activeTab === 'pending'">
+            <!-- 待审批 / 联合付款 标签页可操作 -->
+            <template v-if="activeTab === 'pending' || activeTab === 'joint'">
               <button 
                 @click="rejectExpense(viewingExpense)"
                 class="px-6 py-3 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-medium rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 flex items-center space-x-2"
@@ -770,11 +924,19 @@
                 <span>审批拒绝</span>
               </button>
               <button 
+                v-if="activeTab === 'joint' && getJointMeta(viewingExpense)?.isJoint"
+                @click="startJointApprove(jointPaymentGroups.find(g => g.key === getJointMeta(viewingExpense).key))"
+                class="px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-medium rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 flex items-center space-x-2"
+              >
+                <i class="fas fa-link"></i>
+                <span>联合付款整组通过</span>
+              </button>
+              <button 
                 @click="approveExpense(viewingExpense)"
                 class="px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-medium rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 flex items-center space-x-2"
               >
                 <i class="fas fa-check"></i>
-                <span>审批通过</span>
+                <span>{{ activeTab === 'joint' ? '单笔通过' : '审批通过' }}</span>
               </button>
             </template>
             <button 
@@ -794,6 +956,7 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import NavigationBar from '@/components/NavigationBar.vue'
+import JointPaymentInfo from '@/components/JointPaymentInfo.vue'
 import { ElMessage } from 'element-plus'
 import { expenseApplicationsAPI } from '@/api/expenseApplications'
 import { expenseCategoryAPI } from '@/api/expenseCategory'
@@ -817,6 +980,14 @@ const pendingApprovals = ref([])
 const processedApprovals = ref([])
 const mainCategories = ref([])
 const subCategories = ref([])
+
+// 联合付款
+const jointPaymentItems = ref([])
+const jointLoading = ref(false)
+const expandedJointGroups = ref({})
+const jointApprovingKey = ref('')
+const pendingJointGroup = ref(null)
+const jointMetaByExpenseId = ref({})
 
 // 模态框状态
 const showViewModal = ref(false)
@@ -853,14 +1024,186 @@ const filteredApprovals = computed(() => {
 const pendingCount = computed(() => pendingApprovals.value.length)
 const processedCount = computed(() => processedApprovals.value.length)
 
+const buildJointGroups = (items = []) => {
+  const map = new Map()
+  for (const item of items) {
+    const paymentMethod = String(item.paymentMethod || item.payment_method || '').trim() || '未知方式'
+    const accountType = String(item.accountType || item.account_type || '').trim()
+    const key = accountType
+      ? `${paymentMethod}||${accountType}`
+      : `singleton||${item.id}`
+
+    if (!map.has(key)) {
+      map.set(key, {
+        key,
+        paymentMethod,
+        accountType,
+        items: [],
+        payeeNameSet: new Set(),
+        accountNameSet: new Set()
+      })
+    }
+    const group = map.get(key)
+    group.items.push(item)
+    const payee = String(item.payeeName || item.payee_name || '').trim()
+    const accountName = String(item.accountName || item.account_name || '').trim()
+    if (payee) group.payeeNameSet.add(payee)
+    if (accountName) group.accountNameSet.add(accountName)
+  }
+
+  return [...map.values()]
+    .map((group) => {
+      const totalAmount = group.items.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0)
+      const count = group.items.length
+      return {
+        key: group.key,
+        paymentMethod: group.paymentMethod,
+        accountType: group.accountType,
+        items: group.items,
+        count,
+        totalAmount,
+        isJoint: Boolean(group.accountType) && count > 1,
+        payeeNames: [...group.payeeNameSet],
+        accountNames: [...group.accountNameSet]
+      }
+    })
+    .sort((a, b) => {
+      if (a.isJoint !== b.isJoint) return a.isJoint ? -1 : 1
+      return b.totalAmount - a.totalAmount
+    })
+}
+
+const jointPaymentGroups = computed(() => buildJointGroups(jointPaymentItems.value))
+const jointGroupCount = computed(() => jointPaymentGroups.value.filter((g) => g.isJoint).length)
+const jointPaymentItemCount = computed(() => jointPaymentItems.value.length)
+
+const rebuildJointMetaMap = (groups) => {
+  const meta = {}
+  for (const group of groups) {
+    for (const item of group.items) {
+      meta[item.id] = {
+        key: group.key,
+        isJoint: group.isJoint,
+        count: group.count,
+        totalAmount: group.totalAmount,
+        paymentMethod: group.paymentMethod,
+        accountType: group.accountType
+      }
+    }
+  }
+  jointMetaByExpenseId.value = meta
+}
+
+const getJointMeta = (expense) => {
+  if (!expense?.id) return null
+  return jointMetaByExpenseId.value[expense.id] || null
+}
+
+const formatMoney = (amount) => {
+  const num = parseFloat(amount)
+  if (Number.isNaN(num)) return '0.00'
+  return num.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+const switchTab = (tab) => {
+  activeTab.value = tab
+  if (tab === 'joint') {
+    loadJointPaymentGroups()
+  }
+}
+
+const toggleJointGroup = (key) => {
+  expandedJointGroups.value = {
+    ...expandedJointGroups.value,
+    [key]: !expandedJointGroups.value[key]
+  }
+}
+
+const loadJointPaymentGroups = async () => {
+  jointLoading.value = true
+  try {
+    const params = {
+      page: 1,
+      pageSize: 1000,
+      keyword: searchKeyword.value,
+      status: 'payment_pending',
+      start_date: startDate.value,
+      end_date: endDate.value,
+      main_category_id: selectedMainCategory.value,
+      sub_category_id: selectedSubCategory.value
+    }
+    const response = await expenseApplicationsAPI.getPendingApprovals(params)
+    if (response.success && response.data) {
+      const rawData = Array.isArray(response.data) ? response.data : (response.data.data || response.data.items || [])
+      jointPaymentItems.value = rawData.map(item => ({
+        ...item,
+        attachments: typeof item.attachments === 'string' ? JSON.parse(item.attachments || '[]') : (item.attachments || [])
+      }))
+      const groups = buildJointGroups(jointPaymentItems.value)
+      rebuildJointMetaMap(groups)
+      // 联合组默认展开
+      const expanded = { ...expandedJointGroups.value }
+      groups.filter(g => g.isJoint).forEach(g => {
+        if (expanded[g.key] === undefined) expanded[g.key] = true
+      })
+      expandedJointGroups.value = expanded
+    } else {
+      jointPaymentItems.value = []
+      jointMetaByExpenseId.value = {}
+    }
+  } catch (error) {
+    console.error('加载联合付款失败:', error)
+    jointPaymentItems.value = []
+    jointMetaByExpenseId.value = {}
+  } finally {
+    jointLoading.value = false
+  }
+}
+
+const startJointApprove = (group) => {
+  pendingJointGroup.value = group
+  pendingApprovalExpense.value = group.items[0]
+  pendingApprovalAction.value = 'joint_approve'
+  approvalComment.value = `联合付款确认：${group.paymentMethod} / ${group.accountType || '无账号'}，共 ${group.count} 笔，合计 ¥${formatMoney(group.totalAmount)}`
+  showApprovalCommentModal.value = true
+}
+
+const buildJointPaymentPayload = (group) => {
+  const jointPaymentId = (crypto?.randomUUID && crypto.randomUUID()) || `joint_${Date.now()}`
+  const expenseIds = group.items.map((item) => item.id)
+  const meta = {
+    type: 'joint_payment_meta',
+    id: jointPaymentId,
+    expenseIds,
+    totalAmount: group.totalAmount,
+    count: group.count,
+    paymentMethod: group.paymentMethod,
+    accountType: group.accountType,
+    payeeNames: group.payeeNames || [],
+    createdAt: new Date().toISOString()
+  }
+  const marker = `[JOINT_PAYMENT]${JSON.stringify({
+    id: meta.id,
+    expenseIds: meta.expenseIds,
+    totalAmount: meta.totalAmount,
+    count: meta.count,
+    paymentMethod: meta.paymentMethod,
+    accountType: meta.accountType,
+    payeeNames: meta.payeeNames
+  })}`
+  return { meta, marker }
+}
+
 // 方法
 const loadData = async () => {
   try {
-    await Promise.all([
+    const tasks = [
       loadCategories(),
       loadPendingApprovals(),
-      loadMyApprovals()
-    ])
+      loadMyApprovals(),
+      loadJointPaymentGroups()
+    ]
+    await Promise.all(tasks)
   } catch (error) {
     console.error('加载数据失败:', error)
   }
@@ -1076,13 +1419,15 @@ const viewApproval = async (approval) => {
       if (detailResponse.success && detailResponse.data) {
         // 使用详情数据，合并审批节点信息
         viewingExpense.value = {
+          ...approval,
           ...detailResponse.data,
-          ...approval, // 保留列表中的审批节点信息
           // 确保字段名统一为驼峰命名
           paymentMethod: detailResponse.data.paymentMethod || detailResponse.data.payment_method,
           payeeName: detailResponse.data.payeeName || detailResponse.data.payee_name,
           accountName: detailResponse.data.accountName || detailResponse.data.account_name,
-          accountType: detailResponse.data.accountType || detailResponse.data.account_type
+          accountType: detailResponse.data.accountType || detailResponse.data.account_type,
+          jointPayment: detailResponse.data.jointPayment || null,
+          approvalNode: approval.approvalNode || detailResponse.data.approvalNode
         }
       } else {
         // 如果详情接口失败，使用列表数据
@@ -1121,6 +1466,71 @@ const rejectExpense = (expense) => {
 const executeApproval = async () => {
   if (!approvalComment.value.trim()) {
     ElMessage.error({message: '请输入审批理由', duration: 1000})
+    return
+  }
+
+  // 联合付款：逐笔通过，不改变归属
+  if (pendingApprovalAction.value === 'joint_approve') {
+    if (!pendingJointGroup.value?.items?.length) {
+      ElMessage.error({message: '未选择联合付款分组', duration: 1000})
+      return
+    }
+    if (isUploading.value) {
+      ElMessage.warning({message: '请等待文件上传完成', duration: 1000})
+      return
+    }
+
+    const group = pendingJointGroup.value
+    jointApprovingKey.value = group.key
+    const { meta, marker } = buildJointPaymentPayload(group)
+    const humanComment = approvalComment.value.trim()
+    const comment = `${marker}\n${humanComment}`
+    const fileAttachments = uploadedAttachments.value.length > 0
+      ? uploadedAttachments.value.map(attachment => ({
+          id: attachment.id,
+          name: attachment.name,
+          url: attachment.url,
+          type: attachment.type,
+          size: attachment.size
+        }))
+      : []
+    const attachments = [...fileAttachments, meta]
+
+    let successCount = 0
+    const failed = []
+
+    try {
+      for (const item of group.items) {
+        try {
+          const response = await expenseApplicationsAPI.approveExpenseApplication(item.id, {
+            action: 'approve',
+            comment,
+            attachments
+          })
+          if (response.success) {
+            successCount += 1
+          } else {
+            failed.push(`${item.name || item.id}: ${response.message || '失败'}`)
+          }
+        } catch (err) {
+          failed.push(`${item.name || item.id}: ${err.message || '失败'}`)
+        }
+      }
+
+      if (successCount > 0 && failed.length === 0) {
+        ElMessage.success({ message: `联合付款完成：已通过 ${successCount} 笔`, duration: 2000 })
+      } else if (successCount > 0) {
+        ElMessage.warning({ message: `部分成功：${successCount} 笔通过，${failed.length} 笔失败`, duration: 3000 })
+      } else {
+        ElMessage.error({ message: `联合付款失败：${failed[0] || '未知错误'}`, duration: 3000 })
+      }
+
+      closeApprovalCommentModal()
+      closeViewModal()
+      await loadData()
+    } finally {
+      jointApprovingKey.value = ''
+    }
     return
   }
 
@@ -1179,6 +1589,7 @@ const closeApprovalCommentModal = () => {
   approvalComment.value = ''
   pendingApprovalAction.value = ''
   pendingApprovalExpense.value = null
+  pendingJointGroup.value = null
   // 清空附件上传状态
   selectedFiles.value = []
   uploadedAttachments.value = []
@@ -1596,19 +2007,22 @@ const formatDateTime = (dateStr) => {
 const getAttachments = (node) => {
   
   console.log('原始附件数据:', node)
+  let list = []
   // 如果是字符串，尝试解析JSON
   if (typeof node.attachments === 'string') {
     try {
       const parsed = JSON.parse(node.attachments)
       console.log('解析后的附件数据:', parsed)
-      return Array.isArray(parsed) ? parsed : []
+      list = Array.isArray(parsed) ? parsed : []
     } catch (e) {
       console.error('解析附件数据失败:', e)
       return []
     }
+  } else if (Array.isArray(node.attachments)) {
+    list = node.attachments
   }
-  
-  return []
+  // 过滤联合付款元数据，只展示真实附件
+  return list.filter((item) => item && item.type !== 'joint_payment_meta' && (item.url || item.name))
 }
 
 // 测试通知功能

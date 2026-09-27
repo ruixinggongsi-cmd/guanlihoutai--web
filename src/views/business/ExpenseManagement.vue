@@ -147,9 +147,12 @@
               <tr v-for="expense in paginatedExpenses" :key="expense.id" 
                   class="border-b border-white/10 hover:bg-white/5 transition-colors duration-200">
                 <td class="px-6 py-4">
-                  <span class="text-white font-semibold text-sm bg-gradient-to-r from-white to-gray-200 bg-clip-text text-transparent">
+                  <div class="text-white font-semibold text-sm bg-gradient-to-r from-white to-gray-200 bg-clip-text text-transparent">
                     {{ expense.name }}
-                  </span>
+                  </div>
+                  <div v-if="expense.jointPaymentSummary" class="mt-1">
+                    <JointPaymentInfo :summary-only="true" :summary="expense.jointPaymentSummary" />
+                  </div>
                 </td>
                 <td class="px-6 py-4">
                   <span class="px-3 py-1.5 bg-gradient-to-r from-purple-500/20 to-purple-600/20 text-purple-300 border border-purple-400/30 rounded-full text-xs font-medium backdrop-blur-sm">
@@ -384,6 +387,12 @@
 
               <!-- 付款信息 -->
               <div class="mt-6 pt-6 border-t border-white/10">
+                <JointPaymentInfo
+                  v-if="viewingExpense?.jointPayment"
+                  class="mb-4"
+                  :joint-payment="viewingExpense.jointPayment"
+                  :current-expense-id="viewingExpense?.id"
+                />
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <!-- 左侧：付款方式 -->
                   <div class="space-y-4">
@@ -866,6 +875,7 @@
 </template><script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import NavigationBar from '../../components/NavigationBar.vue'
+import JointPaymentInfo from '../../components/JointPaymentInfo.vue'
 import { expenseApplicationsAPI } from '../../api/expenseApplications'
 import { expenseCategoryAPI } from '../../api/expenseCategory'
 import { useUserStore } from '../../stores/user'// 用户存储
@@ -1042,10 +1052,29 @@ const loadExpenseApplications = async () => {
     
     const response = await expenseApplicationsAPI.getExpenseApplicationsList(params)
     if (response.success) {
-      expenses.value = (response.data || []).map(item => ({
+      const list = (response.data || []).map(item => ({
         ...item,
-        attachments: JSON.parse(item.attachments || '[]')
+        attachments: typeof item.attachments === 'string' ? JSON.parse(item.attachments || '[]') : (item.attachments || [])
       }))
+      try {
+        const ids = list.map((item) => item.id).filter(Boolean)
+        if (ids.length) {
+          const lookup = await expenseApplicationsAPI.lookupJointPayments(ids)
+          if (lookup.success && lookup.data) {
+            expenses.value = list.map((item) => ({
+              ...item,
+              jointPaymentSummary: lookup.data[item.id] || null
+            }))
+          } else {
+            expenses.value = list
+          }
+        } else {
+          expenses.value = list
+        }
+      } catch (lookupError) {
+        console.warn('联合付款摘要加载失败:', lookupError)
+        expenses.value = list
+      }
       totalCount.value = response.pagination?.total || 0
     } else {
       console.error('获取费用申请列表失败:', response.message)
@@ -1191,18 +1220,19 @@ const formatDateTime = (dateStr) => {
 const getAttachments = (node) => {
  
   // 处理JSON字符串或数组格式的附件数据
+  let list = []
   if (typeof node.attachments === 'string') {
     try {
-      let js=JSON.parse(node.attachments)
-      console.log('解析后的附件数据:', js)
-      return js
+      list = JSON.parse(node.attachments)
+      console.log('解析后的附件数据:', list)
     } catch (error) {
       console.warn('解析附件数据失败:', error)
       return []
     }
+  } else if (Array.isArray(node.attachments)) {
+    list = node.attachments
   }
-  
-  return Array.isArray(node.attachments) ? node.attachments : []
+  return (Array.isArray(list) ? list : []).filter((item) => item && item.type !== 'joint_payment_meta' && (item.url || item.name))
 }
 
 // 下载附件函数
@@ -1567,6 +1597,23 @@ const viewExpense = async (expense) => {
     // 直接使用列表中的现有数据作为基础信息
     viewingExpense.value = expense
     showViewModal.value = true
+
+    try {
+      const detailResponse = await expenseApplicationsAPI.getExpenseApplicationDetail(expense.id)
+      if (detailResponse.success && detailResponse.data) {
+        viewingExpense.value = {
+          ...expense,
+          ...detailResponse.data,
+          payment_method: detailResponse.data.payment_method || detailResponse.data.paymentMethod || expense.payment_method,
+          payee_name: detailResponse.data.payee_name || detailResponse.data.payeeName || expense.payee_name,
+          account_name: detailResponse.data.account_name || detailResponse.data.accountName || expense.account_name,
+          account_type: detailResponse.data.account_type || detailResponse.data.accountType || expense.account_type,
+          jointPayment: detailResponse.data.jointPayment || null
+        }
+      }
+    } catch (detailError) {
+      console.warn('加载费用详情失败，使用列表数据:', detailError)
+    }
     
     // 仅获取审批节点信息（点击查看时获取）
     try {
