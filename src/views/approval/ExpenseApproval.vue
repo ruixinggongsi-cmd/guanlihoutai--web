@@ -804,22 +804,35 @@
             </div>
             
             <div class="bg-white/5 rounded-xl p-6 border border-white/10 backdrop-blur-sm">
-              <div v-if="viewingExpense?.attachments?.length > 0" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <div v-for="(file, index) in viewingExpense.attachments" :key="index" 
-                     class="flex items-center justify-between p-4 bg-white/10 hover:bg-white/15 rounded-lg border border-white/20 transition-all duration-200 cursor-pointer"
-                     @click="downloadAttachment(file)">
-                  <div class="flex items-center space-x-3">
-                    <div class="w-10 h-10 bg-gradient-to-r from-primary to-primary-light rounded-lg flex items-center justify-center">
-                      <i class="fas fa-file text-white text-sm"></i>
-                    </div>
-                    <div class="min-w-0 flex-1">
-                      <div class="text-white font-medium text-sm truncate max-w-48" :title="file.name">{{ file.name }}</div>
-                      <div class="text-gray-400 text-xs">{{ formatFileSize(file.size) }}</div>
-                    </div>
+              <div v-if="expenseAttachments.length > 0" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div v-for="(file, index) in expenseAttachments" :key="index" 
+                     class="p-4 bg-white/10 hover:bg-white/15 rounded-lg border border-white/20 transition-all duration-200">
+                  <div v-if="isImageAttachment(file)" class="mb-3">
+                    <img
+                      :src="file.url"
+                      :alt="file.name"
+                      class="w-full max-h-48 object-contain rounded-lg border border-white/20 bg-black/20 cursor-pointer"
+                      @click="openAttachment(file)"
+                    />
                   </div>
-                  <button class="w-8 h-8 bg-gradient-to-r from-success to-success-light rounded-lg flex items-center justify-center hover:from-success-light hover:to-success transition-all duration-200 flex-shrink-0">
-                    <i class="fas fa-download text-white text-xs"></i>
-                  </button>
+                  <div class="flex items-center justify-between cursor-pointer" @click="openAttachment(file)">
+                    <div class="flex items-center space-x-3 min-w-0">
+                      <div class="w-10 h-10 bg-gradient-to-r from-primary to-primary-light rounded-lg flex items-center justify-center flex-shrink-0">
+                        <i :class="isImageAttachment(file) ? 'fas fa-image' : 'fas fa-file'" class="text-white text-sm"></i>
+                      </div>
+                      <div class="min-w-0 flex-1">
+                        <div class="text-white font-medium text-sm truncate max-w-48" :title="file.name">{{ file.name }}</div>
+                        <div class="text-gray-400 text-xs">{{ formatFileSize(file.size) }}</div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      class="w-8 h-8 bg-gradient-to-r from-success to-success-light rounded-lg flex items-center justify-center hover:from-success-light hover:to-success transition-all duration-200 flex-shrink-0"
+                      @click.stop="openAttachment(file)"
+                    >
+                      <i :class="isImageAttachment(file) ? 'fas fa-eye' : 'fas fa-download'" class="text-white text-xs"></i>
+                    </button>
+                  </div>
                 </div>
               </div>
               <div v-else class="text-gray-400 text-center py-6">
@@ -879,22 +892,30 @@
                       <div v-if="node.comment" class="mt-2 p-2 rounded-lg border" :class="isTimeoutRejection(node) ? 'bg-red-500/20 border-red-400/30' : 'bg-white/5 border-white/10'">
                         <div class="flex items-start space-x-2">
                           <i :class="isTimeoutRejection(node) ? 'fas fa-exclamation-triangle text-red-400' : 'fas fa-comment text-gray-400'" class="text-xs mt-0.5"></i>
-                          <div :class="isTimeoutRejection(node) ? 'text-red-300 font-semibold' : 'text-gray-300'" class="text-xs leading-relaxed flex-1">
-                            {{ node.comment }}
+                          <div :class="isTimeoutRejection(node) ? 'text-red-300 font-semibold' : 'text-gray-300'" class="text-xs leading-relaxed flex-1 whitespace-pre-wrap">
+                            {{ formatNodeComment(node.comment) }}
                             <span v-if="isTimeoutRejection(node)" class="ml-2 text-red-400">⏰</span>
                           </div>
                         </div>
                       </div>
                       <!-- 审批节点附件显示 -->
-                      <div v-if="getAttachments(node).length > 0" class="mt-2">
+                      <div v-if="getAttachments(node).length > 0" class="mt-2 space-y-2">
                         <div class="flex flex-wrap gap-2">
                           <div v-for="(attachment, index) in getAttachments(node)" :key="index" 
                                class="flex items-center space-x-2 bg-white/10 hover:bg-white/20 rounded-lg px-3 py-1.5 border border-white/20 transition-all duration-200 cursor-pointer"
-                               @click="downloadAttachment(attachment)">
-                            <i class="fas fa-paperclip text-gray-300 text-xs"></i>
+                               @click="openAttachment(attachment)">
+                            <i :class="isImageAttachment(attachment) ? 'fas fa-image' : 'fas fa-paperclip'" class="text-gray-300 text-xs"></i>
                             <span class="text-gray-200 text-xs truncate max-w-32">{{ attachment.name }}</span>
                             <span class="text-gray-400 text-xs">({{ formatFileSize(attachment.size) }})</span>
                           </div>
+                        </div>
+                        <div v-for="(attachment, index) in getAttachments(node).filter(isImageAttachment)" :key="`img-${index}`">
+                          <img
+                            :src="attachment.url"
+                            :alt="attachment.name"
+                            class="max-h-32 rounded-lg border border-white/20 bg-black/20 cursor-pointer"
+                            @click="openAttachment(attachment)"
+                          />
                         </div>
                       </div>
                     </div>
@@ -963,6 +984,7 @@ import { expenseCategoryAPI } from '@/api/expenseCategory'
 import request from '@/utils/request'
 import approvalNotificationService from '@/utils/approvalNotification'
 import { permissionUtils } from '@/utils/permission'
+import { normalizeAttachments, filterDisplayAttachments, isImageAttachment } from '@/utils/attachments'
 
 // 响应式数据
 const searchKeyword = ref('')
@@ -1020,6 +1042,10 @@ const availableSubCategories = computed(() => {
 const filteredApprovals = computed(() => {
   return activeTab.value === 'pending' ? pendingApprovals.value : processedApprovals.value
 })
+
+const expenseAttachments = computed(() =>
+  filterDisplayAttachments(viewingExpense.value?.attachments)
+)
 
 const pendingCount = computed(() => pendingApprovals.value.length)
 const processedCount = computed(() => processedApprovals.value.length)
@@ -1137,7 +1163,7 @@ const loadJointPaymentGroups = async () => {
       const rawData = Array.isArray(response.data) ? response.data : (response.data.data || response.data.items || [])
       jointPaymentItems.value = rawData.map(item => ({
         ...item,
-        attachments: typeof item.attachments === 'string' ? JSON.parse(item.attachments || '[]') : (item.attachments || [])
+        attachments: normalizeAttachments(item.attachments)
       }))
       const groups = buildJointGroups(jointPaymentItems.value)
       rebuildJointMetaMap(groups)
@@ -1286,7 +1312,7 @@ const loadPendingApprovals = async () => {
      
       pendingApprovals.value = rawData.map(item => ({
         ...item,
-        attachments: JSON.parse(item.attachments || '[]')
+        attachments: normalizeAttachments(item.attachments)
       }))
       
       // 处理分页信息
@@ -1326,7 +1352,7 @@ const loadMyApprovals = async () => {
       
       processedApprovals.value = rawData.map(item => ({
         ...item,
-        attachments: typeof item.attachments === 'string' ? JSON.parse(item.attachments || '[]') : (item.attachments || [])
+        attachments: normalizeAttachments(item.attachments)
       }))
       
       // 处理分页信息
@@ -1426,6 +1452,7 @@ const viewApproval = async (approval) => {
           payeeName: detailResponse.data.payeeName || detailResponse.data.payee_name,
           accountName: detailResponse.data.accountName || detailResponse.data.account_name,
           accountType: detailResponse.data.accountType || detailResponse.data.account_type,
+          attachments: normalizeAttachments(detailResponse.data.attachments ?? approval.attachments),
           jointPayment: detailResponse.data.jointPayment || null,
           approvalNode: approval.approvalNode || detailResponse.data.approvalNode
         }
@@ -1735,19 +1762,22 @@ const uploadFiles = async () => {
   }
 }
 
-const downloadAttachment = (attachment) => {
-  if (attachment.url) {
-    // 创建临时链接下载文件
-    const link = document.createElement('a')
-    link.href = attachment.url
-    link.target = '_blank'
-    link.download = attachment.name
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-  } else {
-    ElMessage.warning('文件下载链接无效')
+const formatNodeComment = (comment = '') => {
+  return String(comment || '')
+    .replace(/\[JOINT_PAYMENT\]\{[\s\S]*?\}(?:\n)?/, '')
+    .trim()
+}
+
+const openAttachment = (attachment) => {
+  if (!attachment?.url) {
+    ElMessage.warning('文件链接无效')
+    return
   }
+  window.open(attachment.url, '_blank', 'noopener,noreferrer')
+}
+
+const downloadAttachment = (attachment) => {
+  openAttachment(attachment)
 }
 
 const uploadSingleFile = async (file) => {
@@ -2003,27 +2033,8 @@ const formatDateTime = (dateStr) => {
 
 
 
-// 获取附件列表（处理JSON字符串或数组格式）
-const getAttachments = (node) => {
-  
-  console.log('原始附件数据:', node)
-  let list = []
-  // 如果是字符串，尝试解析JSON
-  if (typeof node.attachments === 'string') {
-    try {
-      const parsed = JSON.parse(node.attachments)
-      console.log('解析后的附件数据:', parsed)
-      list = Array.isArray(parsed) ? parsed : []
-    } catch (e) {
-      console.error('解析附件数据失败:', e)
-      return []
-    }
-  } else if (Array.isArray(node.attachments)) {
-    list = node.attachments
-  }
-  // 过滤联合付款元数据，只展示真实附件
-  return list.filter((item) => item && item.type !== 'joint_payment_meta' && (item.url || item.name))
-}
+// 获取审批节点附件
+const getAttachments = (node) => filterDisplayAttachments(node?.attachments)
 
 // 测试通知功能
 const testNotification = async () => {
