@@ -160,8 +160,18 @@
                 class="px-4 py-2 rounded-md font-medium transition-all duration-300"
               >
                 <i class="fas fa-clock mr-2"></i>
-                {{ isSuperAdmin ? '全部待审批' : '待我审批' }}
+                {{ (isSuperAdmin || isFinanceRole) ? '待审批' : '待我审批' }}
                 <span class="ml-2 bg-yellow-500/20 text-yellow-400 px-2 py-1 rounded-full text-xs">{{ pendingCount }}</span>
+              </button>
+              <button
+                v-if="isSuperAdmin || isFinanceRole"
+                @click="switchTab('finance')"
+                :class="activeTab === 'finance' ? 'bg-primary text-white' : 'text-gray-400 hover:text-white'"
+                class="px-4 py-2 rounded-md font-medium transition-all duration-300"
+              >
+                <i class="fas fa-wallet mr-2"></i>
+                待财务审批
+                <span class="ml-2 bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded-full text-xs">{{ financePendingCount }}</span>
               </button>
               <button 
                 @click="switchTab('joint')" 
@@ -184,6 +194,21 @@
             </div>
           </div>
         </div>
+        <div
+          v-if="activeTab === 'pending' && isFinanceRole"
+          class="mx-6 mt-4 rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200"
+        >
+          <i class="fas fa-info-circle mr-2"></i>
+          这里是仍在层级审批中的申请。财务可越级拒绝，但不能越级同意。
+        </div>
+        <div
+          v-if="activeTab === 'finance' && isFinanceRole"
+          class="mx-6 mt-4 rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200"
+        >
+          <i class="fas fa-wallet mr-2"></i>
+          这里是已完成层级审批、当前等待财务审批付款的申请。
+        </div>
+
         <div v-if="activeTab === 'joint'" class="p-6 space-y-4">
           <div class="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
             <i class="fas fa-info-circle mr-2"></i>
@@ -936,16 +961,17 @@
         <div class="p-6 border-t border-white/10 flex-shrink-0">
           <div class="flex justify-end space-x-4">
             <!-- 待审批 / 联合付款 标签页可操作 -->
-            <template v-if="activeTab === 'pending' || activeTab === 'joint'">
+            <template v-if="activeTab === 'pending' || activeTab === 'finance' || activeTab === 'joint'">
               <button 
+                v-if="canRejectExpense(viewingExpense)"
                 @click="rejectExpense(viewingExpense)"
                 class="px-6 py-3 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-medium rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 flex items-center space-x-2"
               >
                 <i class="fas fa-times"></i>
-                <span>审批拒绝</span>
+                <span>{{ isCrossLevelReject(viewingExpense) ? '越级拒绝' : '审批拒绝' }}</span>
               </button>
               <button 
-                v-if="activeTab === 'joint' && getJointMeta(viewingExpense)?.isJoint"
+                v-if="activeTab === 'joint' && getJointMeta(viewingExpense)?.isJoint && canApproveExpense(viewingExpense)"
                 @click="startJointApprove(jointPaymentGroups.find(g => g.key === getJointMeta(viewingExpense).key))"
                 class="px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-medium rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 flex items-center space-x-2"
               >
@@ -953,12 +979,20 @@
                 <span>联合付款整组通过</span>
               </button>
               <button 
+                v-if="canApproveExpense(viewingExpense)"
                 @click="approveExpense(viewingExpense)"
                 class="px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-medium rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 flex items-center space-x-2"
               >
                 <i class="fas fa-check"></i>
                 <span>{{ activeTab === 'joint' ? '单笔通过' : '审批通过' }}</span>
               </button>
+              <div
+                v-else-if="isFinanceRole && !canApproveExpense(viewingExpense)"
+                class="px-4 py-3 rounded-xl border border-amber-400/30 bg-amber-500/10 text-amber-200 text-sm flex items-center"
+              >
+                <i class="fas fa-info-circle mr-2"></i>
+                财务不能越级通过，请等待流转到您的节点
+              </div>
             </template>
             <button 
               @click="closeViewModal"
@@ -985,6 +1019,9 @@ import request from '@/utils/request'
 import approvalNotificationService from '@/utils/approvalNotification'
 import { permissionUtils } from '@/utils/permission'
 import { normalizeAttachments, filterDisplayAttachments, isImageAttachment } from '@/utils/attachments'
+import { useUserStore } from '@/stores/user'
+
+const userStore = useUserStore()
 
 // 响应式数据
 const searchKeyword = ref('')
@@ -1032,6 +1069,51 @@ const fileInput = ref(null) // 文件输入框引用
 const maxFileSize = 100 * 1024 * 1024 // 100MB
 const allowedFileTypes = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'jpg', 'jpeg', 'png', 'zip', 'rar']
 const isSuperAdmin = computed(() => permissionUtils.isSuperAdmin())
+const isFinanceRole = computed(() => permissionUtils.isFinanceRole())
+
+const currentUserId = computed(() => userStore.userInfo?.id || '')
+
+const getExpenseCurrentNode = (expense) => {
+  if (!expense) return null
+  return expense.approvalNode || expense.approval_node || null
+}
+
+const isOwnApprovalNode = (expense) => {
+  const node = getExpenseCurrentNode(expense)
+  if (!node?.user_id) return false
+  const uid = currentUserId.value
+  if (!uid) return false
+  return String(node.user_id) === String(uid)
+}
+
+/** 财务可越级拒绝；其他人仅本人节点；超管按原规则 */
+const canRejectExpense = (expense) => {
+  if (!expense) return false
+  if (isFinanceRole.value) return true
+  if (isSuperAdmin.value) {
+    const node = getExpenseCurrentNode(expense)
+    // 超管不能代财务付款节点操作（含拒绝），与后端一致
+    if (node && isFinanceApprovalNode(node) && !isOwnApprovalNode(expense)) return false
+    return true
+  }
+  return isOwnApprovalNode(expense)
+}
+
+/** 通过必须是本人节点（财务也不能越级通过）；超管除外但财务节点仍需本人 */
+const canApproveExpense = (expense) => {
+  if (!expense) return false
+  if (isOwnApprovalNode(expense)) return true
+  if (isSuperAdmin.value) {
+    const node = getExpenseCurrentNode(expense)
+    if (node && isFinanceApprovalNode(node)) return false
+    return true
+  }
+  return false
+}
+
+const isCrossLevelReject = (expense) => {
+  return isFinanceRole.value && !isOwnApprovalNode(expense)
+}
 
 // 计算属性
 const availableSubCategories = computed(() => {
@@ -1040,14 +1122,22 @@ const availableSubCategories = computed(() => {
 })
 
 const filteredApprovals = computed(() => {
-  return activeTab.value === 'pending' ? pendingApprovals.value : processedApprovals.value
+  return ['pending', 'finance'].includes(activeTab.value)
+    ? pendingApprovals.value
+    : processedApprovals.value
 })
 
 const expenseAttachments = computed(() =>
   filterDisplayAttachments(viewingExpense.value?.attachments)
 )
 
-const pendingCount = computed(() => pendingApprovals.value.length)
+const approvalPendingCount = ref(0)
+const financePendingCount = ref(0)
+const pendingCount = computed(() =>
+  (isSuperAdmin.value || isFinanceRole.value)
+    ? approvalPendingCount.value
+    : pendingApprovals.value.length
+)
 const processedCount = computed(() => processedApprovals.value.length)
 
 const buildJointGroups = (items = []) => {
@@ -1133,8 +1223,11 @@ const formatMoney = (amount) => {
 
 const switchTab = (tab) => {
   activeTab.value = tab
+  currentPage.value = 1
   if (tab === 'joint') {
     loadJointPaymentGroups()
+  } else if (['pending', 'finance'].includes(tab)) {
+    loadPendingApprovals()
   }
 }
 
@@ -1227,11 +1320,45 @@ const loadData = async () => {
       loadCategories(),
       loadPendingApprovals(),
       loadMyApprovals(),
-      loadJointPaymentGroups()
+      loadJointPaymentGroups(),
+      loadPendingCounts()
     ]
     await Promise.all(tasks)
   } catch (error) {
     console.error('加载数据失败:', error)
+  }
+}
+
+const getPendingFilterParams = (status, pageSize = 1) => ({
+  page: 1,
+  pageSize,
+  keyword: searchKeyword.value,
+  status,
+  start_date: startDate.value,
+  end_date: endDate.value,
+  main_category_id: selectedMainCategory.value,
+  sub_category_id: selectedSubCategory.value
+})
+
+const getResponseTotal = (response) => {
+  if (response?.data?.pagination?.total !== undefined) return response.data.pagination.total
+  if (response?.pagination?.total !== undefined) return response.pagination.total
+  if (response?.data?.total !== undefined) return response.data.total
+  if (Array.isArray(response?.data)) return response.data.length
+  return 0
+}
+
+const loadPendingCounts = async () => {
+  if (!isSuperAdmin.value && !isFinanceRole.value) return
+  try {
+    const [approvalResponse, financeResponse] = await Promise.all([
+      expenseApplicationsAPI.getPendingApprovals(getPendingFilterParams('approval_pending')),
+      expenseApplicationsAPI.getPendingApprovals(getPendingFilterParams('payment_pending'))
+    ])
+    approvalPendingCount.value = approvalResponse.success ? getResponseTotal(approvalResponse) : 0
+    financePendingCount.value = financeResponse.success ? getResponseTotal(financeResponse) : 0
+  } catch (error) {
+    console.error('加载待审批数量失败:', error)
   }
 }
 
@@ -1295,11 +1422,16 @@ const loadCategories = async () => {
 
 const loadPendingApprovals = async () => {
   try {
+    const tabStatus = activeTab.value === 'finance'
+      ? 'payment_pending'
+      : ((isSuperAdmin.value || isFinanceRole.value) && activeTab.value === 'pending'
+        ? 'approval_pending'
+        : statusFilter.value)
     const params = {
       page: currentPage.value,
       pageSize: pageSize.value,
       keyword: searchKeyword.value,
-      status: statusFilter.value,
+      status: tabStatus,
       start_date: startDate.value,
       end_date: endDate.value,
       main_category_id: selectedMainCategory.value,

@@ -139,6 +139,28 @@ export const permissionUtils = {
       roleCode === 'superadmin' ||
       roleName === '超级管理员'
     )
+  },
+
+  /**
+   * 是否为财务角色（可看全部申请、可越级拒绝，不可越级通过）
+   */
+  isFinanceRole() {
+    const userStore = useUserStore()
+    if (!userStore.isLoggedIn) {
+      return false
+    }
+
+    const user = userStore.userInfo || {}
+    const username = String(user.username || '').toLowerCase()
+    const roleCode = String(user.roleInfo?.role_code || user.role_code || '').toLowerCase()
+    const roleName = String(user.roleInfo?.role_name || user.role_name || '')
+
+    return (
+      roleCode === 'caiwu' ||
+      roleName === '财务' ||
+      roleName.includes('财务') ||
+      username === 'caiwu'
+    )
   }
 }
 

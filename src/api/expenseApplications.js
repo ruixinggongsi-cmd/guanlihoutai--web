@@ -18,7 +18,7 @@ export const expenseApplicationsAPI = {
   },
 
   /**
-   * 获取所有费用申请列表（仅超级管理员）
+   * 获取所有费用申请列表（超级管理员 / 财务）
    * @param {Object} params - 查询参数
    * @param {number} params.page - 页码，默认1
    * @param {number} params.pageSize - 每页条数，默认10

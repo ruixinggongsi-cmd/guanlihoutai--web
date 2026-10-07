@@ -413,19 +413,24 @@ const hasViewAllApplicationsPermission = computed(() => {
                         dataPermission === 'all' || 
                         roleName === '超级管理员' ||
                         isAdminUser // 如果用户名为admin，也认为是超级管理员
+    const isFinance = permissionUtils.isFinanceRole() ||
+                      String(roleCode || '').toLowerCase() === 'caiwu' ||
+                      String(roleName || '').includes('财务') ||
+                      username.toLowerCase() === 'caiwu'
     
-    if (isSuperAdmin) {
-      console.log('[费用统计] ✅ 通过超级管理员检查，允许访问所有申请记录', {
+    if (isSuperAdmin || isFinance) {
+      console.log('[费用统计] ✅ 通过超管/财务检查，允许访问所有申请记录', {
         roleCode,
         dataPermission,
         roleName,
         username,
-        isAdminUser
+        isAdminUser,
+        isFinance
       })
       console.log('[费用统计] ====================================')
       return true
     } else {
-      console.log('[费用统计] ❌ 未通过超级管理员检查')
+      console.log('[费用统计] ❌ 未通过超级管理员/财务检查')
     }
   } else {
     console.log('[费用统计] ⚠️ 用户信息为空')
